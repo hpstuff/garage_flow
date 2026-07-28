@@ -1,0 +1,7 @@
+# Location scoping enforced in the application layer (ScopedDb)
+
+**Context.** ADR-0003 requires every query to carry a Location scope that "cannot be bypassed." Two mechanisms deliver this: an application-layer scoped data-access wrapper, or PostgreSQL Row-Level Security (RLS). RLS is bypass-proof at the database but adds hand-written policies on every table plus per-transaction session-variable handling; the app-layer approach is faster to build and fully typed, but relies on nobody reaching around it.
+
+**Decision.** v1 enforces scoping in the **application layer via a `ScopedDb` wrapper**. Services receive a `scope` (`{ accountId, locationId }`) and all access to tenant-scoped tables goes through a wrapper bound to it, so no scoped query can be constructed without the scope. The `scope` is **only constructible from a resolved session** (ADR-0014), making an un-scoped query a compile-time error rather than a review catch. **PostgreSQL RLS is deferred** as the first post-v1 hardening step.
+
+**Consequences.** This buys most of the isolation guarantee for a fraction of the effort, entirely within our stack and trivially unit-testable. The residual risk is a developer bypassing `ScopedDb` with raw SQL; the import boundary (ADR-0015) and tests mitigate it, and RLS closes it absolutely when added. Because the per-transaction wrapper RLS would need is the same wrapper built now, choosing app-layer first burns no bridge. In v1 each Account has exactly one Location, so the practical tenant boundary is the Account.

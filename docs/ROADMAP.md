@@ -2,7 +2,7 @@
 
 What the v1 domain model deliberately excludes, and the open questions each area carries. These were parked during the initial grilling session — none block v1. When one comes on deck, grill it into decisions (update `CONTEXT.md` and add ADRs), then move it out of this list.
 
-For what *is* settled, see [`CONTEXT.md`](../CONTEXT.md) (glossary) and [`docs/adr/`](./adr/) (decisions 0001–0009).
+For what *is* settled, see [`CONTEXT.md`](../CONTEXT.md) (glossary) and [`docs/adr/`](./adr/) (decisions 0001–0018). The v1 technical foundation (ADRs 0010–0018) is also distilled, project-agnostic, in [`architecture-blueprint.md`](./architecture-blueprint.md).
 
 ## v1 scope (settled — for reference)
 
