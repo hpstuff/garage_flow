@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.local
+.env.*.local
+.pgdata
+coverage
+test-results
+playwright-report
+**/*.test.ts
+**/*.test.tsx
+Dockerfile
+.dockerignore
