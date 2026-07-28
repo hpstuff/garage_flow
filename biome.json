@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "overrides": [
+    {
+      "//": "ADR-0005 / ADR-0015: the transport-free core (src/server) must not import the web framework, React, or the app/adapter layer. This is the enforced 'no business logic outside the service layer' boundary.",
+      "includes": ["src/server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "next",
+                      "next/**",
+                      "react",
+                      "react/**",
+                      "react-dom",
+                      "react-dom/**",
+                      "server-only",
+                      "@/app",
+                      "@/app/**"
+                    ],
+                    "message": "src/server is the transport-free core (ADR-0005/0015): it must not import Next.js, React, or the app/adapter layer. Move adapter code to src/app."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
