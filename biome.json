@@ -6,7 +6,8 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": true
+    "ignoreUnknown": true,
+    "includes": ["**", "!**/*.css", "!src/server/db/migrations"]
   },
   "formatter": {
     "enabled": true,
@@ -25,7 +26,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "preset": "recommended"
     }
   },
   "javascript": {
@@ -36,7 +37,6 @@
   },
   "overrides": [
     {
-      "//": "ADR-0005 / ADR-0015: the transport-free core (src/server) must not import the web framework, React, or the app/adapter layer. This is the enforced 'no business logic outside the service layer' boundary.",
       "includes": ["src/server/**"],
       "linter": {
         "rules": {

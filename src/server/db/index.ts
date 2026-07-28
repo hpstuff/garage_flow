@@ -12,5 +12,5 @@ export function scoped(scope: Scope): ScopedDb {
   return ScopedDb.create(scope, db);
 }
 
+export type { ResolvedSession, Role, Scope } from "./scope";
 export { ScopedDb } from "./scoped-db";
-export type { Scope, Role, ResolvedSession } from "./scope";

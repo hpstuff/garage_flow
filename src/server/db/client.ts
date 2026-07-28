@@ -29,4 +29,4 @@ if (process.env.NODE_ENV !== "production") {
 export const db = drizzle(queryClient, { schema, casing: "snake_case" });
 
 export type Db = typeof db;
-export { schema, queryClient };
+export { queryClient, schema };

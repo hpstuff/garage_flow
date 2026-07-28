@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { scoped, type Scope } from "../../db";
+import { type Scope, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
 import { dashboardQuerySchema } from "./schema";
 
