@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/.playwright
+
+# env files (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# local postgres cluster used for verification
+/.pgdata
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.idea
+.vscode/*
+!.vscode/extensions.json

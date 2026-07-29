@@ -1,0 +1,38 @@
+# Kamal deploy config (ADR-0012) — TEMPLATE, not yet active.
+#
+# CD deploys the CI-built image to a Hetzner VPS with zero downtime and
+# automatic Let's Encrypt TLS via Kamal's proxy. The database is a SEPARATE
+# managed, backed-up Postgres (ADR-0012) — never colocated in this container,
+# because it holds legally-retained Invoices.
+#
+# Fill the <placeholders>, store secrets in .kamal/secrets (git-ignored), and
+# run migrations against the managed DB as a one-off before the first deploy:
+#   DATABASE_URL=... npm run db:migrate
+# Later this becomes a Kamal pre-deploy hook.
+
+service: garage-flow
+image: <registry-namespace>/garage-flow
+
+servers:
+  web:
+    - <APP_SERVER_IP>
+
+proxy:
+  ssl: true
+  host: <your-domain>
+  app_port: 3000
+
+registry:
+  server: <registry-host>
+  username: <registry-user>
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+env:
+  clear:
+    BETTER_AUTH_URL: https://<your-domain>
+  secret:
+    - DATABASE_URL
+    - BETTER_AUTH_SECRET
+
+# Colocate app and DB region for data residency (EU) per ADR-0004/0012.
