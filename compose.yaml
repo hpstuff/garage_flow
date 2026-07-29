@@ -1,0 +1,24 @@
+# Local-dev Postgres for GarageFlow (ADR-0011, ADR-0012).
+# Matches the CI service and the default DATABASE_URL in .env.
+# Managed via the db:* npm scripts (db:up / db:down / db:logs / db:reset).
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: garageflow
+      POSTGRES_PASSWORD: garageflow
+      POSTGRES_DB: garageflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      # Lets `docker compose up --wait` block until Postgres accepts connections.
+      test: ["CMD-SHELL", "pg_isready -U garageflow -d garageflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
