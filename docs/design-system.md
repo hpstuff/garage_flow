@@ -92,7 +92,7 @@ Components are ported group by group, one PR per group. For each component:
 | Phase | Group          | Components                                             |
 | ----- | -------------- | ----------------------------------------------------- |
 | 1 ✅  | Foundation     | tokens, Button, Card, Input, Label, Badge, Separator  |
-| 2     | Forms          | Select, Checkbox, Radio, Switch, Textarea, Field      |
+| 2 ✅  | Forms          | Select, Checkbox, Radio, Switch, Textarea, Field      |
 | 3     | Data display   | Table, Avatar, Tabs, Tooltip, Progress                |
 | 4     | Navigation     | Sidebar/Nav, Breadcrumb, Dropdown menu, Pagination    |
 | 5     | Overlays       | Dialog, Sheet, Popover, Toast/Notification            |
@@ -100,3 +100,21 @@ Components are ported group by group, one PR per group. For each component:
 
 Radix primitives (per ADR-0017) can back the interactive components in phases 2–5;
 add the `@radix-ui/*` packages as each group needs them.
+
+### Phase 2 — Forms
+
+`Select`, `Checkbox`, `RadioGroup`, `Switch` are backed by the matching
+`@radix-ui/react-*` primitive; `Textarea` is a plain element mirroring `Input`.
+Icons come from **`lucide-react`** (the icon library declared in `components.json`):
+`Check` (checkbox / select item), `Circle` (radio dot), `ChevronsUpDown` (select
+trigger, matching SnowUI's up/down affordance). All controls stay token-driven and
+add **no new tokens** — checked states use `primary`, surfaces `card`/`popover`,
+and the error state (`aria-invalid`) uses a `destructive` border.
+
+- **Radio** has no distinct SnowUI source (the kit ships CheckBox + Switch only),
+  so `RadioGroupItem` mirrors the Checkbox treatment as a circle.
+- **`Field`** is the label + control + error/description wrapper. It does the a11y
+  wiring once (`htmlFor`, `aria-invalid`, `aria-describedby`) and takes a plain
+  `error` string, so it drops into react-hook-form + Zod (ADR-0016) without adding
+  a form-library dependency. Checkbox/Switch, whose label sits beside the control,
+  compose `Label` + control inline instead of using `Field`'s vertical layout.
