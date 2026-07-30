@@ -4,64 +4,101 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design tokens as CSS variables (ADR-0017). Components reference the mapped
- * Tailwind utilities (bg-background, text-foreground, bg-primary, …), never raw
- * colours — so the whole system re-themes from this one place.
+ * Design tokens as CSS variables (ADR-0017), synced from the SnowUI Dashboard
+ * Design System (Figma). Components reference the mapped Tailwind utilities
+ * (bg-background, text-foreground, bg-primary, …), never raw colours — so the
+ * whole system re-themes from this one place. See docs/design-system.md for the
+ * Figma-token → CSS-token map and the component-port playbook.
+ *
+ * Two layers, mirroring SnowUI's model:
+ *   1. "Themes" — semantic tokens below that swap between :root (light) and
+ *      .dark. Neutrals are pure greys (hue 0, chroma 0) = SnowUI's Black/White
+ *      opacity scale composited onto the surface.
+ *   2. "Color styles" — the fixed pastel accent palette + tints, defined once
+ *      in @theme (identical in light and dark), used for status/tags/charts.
+ *
+ * SnowUI's 4px spacing base and Inter type ramp (12/16, 14/20, 24/32) already
+ * match Tailwind's defaults, so only colours + radius are overridden here.
  */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem; /* SnowUI Radius/8 = 8px */
 
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.16 0.02 260);
+  --background: oklch(0.98 0 0); /* Background/2 #f9f9fa — page */
+  --foreground: oklch(0.21 0 0); /* Black/100 — primary text */
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.02 260);
+  --card: oklch(1 0 0); /* Background/1 #ffffff — surfaces */
+  --card-foreground: oklch(0.21 0 0);
 
-  --primary: oklch(0.55 0.16 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0 0);
+
+  --primary: oklch(0.17 0 0); /* SnowUI-Light Primary = near-black */
   --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.97 0.01 260);
-  --secondary-foreground: oklch(0.22 0.02 260);
+  --secondary: oklch(0.97 0 0); /* Black/4 — subtle surface */
+  --secondary-foreground: oklch(0.21 0 0);
 
-  --muted: oklch(0.97 0.01 260);
-  --muted-foreground: oklch(0.55 0.02 260);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.56 0 0); /* Black/40 — secondary text */
 
-  --accent: oklch(0.96 0.02 255);
-  --accent-foreground: oklch(0.22 0.02 260);
+  --accent: oklch(0.96 0.015 280); /* Color 2 #edeefc — hover/selected tint */
+  --accent-foreground: oklch(0.21 0 0);
 
-  --destructive: oklch(0.58 0.23 27);
+  --destructive: oklch(0.58 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.92 0.01 260);
-  --input: oklch(0.92 0.01 260);
-  --ring: oklch(0.55 0.16 255);
+  --border: oklch(0.92 0 0); /* Black/10 */
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.17 0 0);
+
+  /* Sidebar / navigation surface (SnowUI's left nav). */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.21 0 0);
+  --sidebar-primary: oklch(0.17 0 0);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.015 280);
+  --sidebar-accent-foreground: oklch(0.21 0 0);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: oklch(0.17 0 0);
 }
 
 .dark {
-  --background: oklch(0.17 0.02 260);
-  --foreground: oklch(0.97 0.01 260);
+  --background: oklch(0.18 0 0);
+  --foreground: oklch(0.97 0 0);
 
-  --card: oklch(0.21 0.02 260);
-  --card-foreground: oklch(0.97 0.01 260);
+  --card: oklch(0.22 0 0);
+  --card-foreground: oklch(0.97 0 0);
 
-  --primary: oklch(0.66 0.15 255);
-  --primary-foreground: oklch(0.17 0.02 260);
+  --popover: oklch(0.22 0 0);
+  --popover-foreground: oklch(0.97 0 0);
 
-  --secondary: oklch(0.27 0.02 260);
-  --secondary-foreground: oklch(0.97 0.01 260);
+  --primary: oklch(0.8 0.08 290); /* SnowUI-Dark Primary = lavender */
+  --primary-foreground: oklch(0.18 0 0);
 
-  --muted: oklch(0.27 0.02 260);
-  --muted-foreground: oklch(0.72 0.02 260);
+  --secondary: oklch(0.27 0 0); /* White/10 on dark */
+  --secondary-foreground: oklch(0.97 0 0);
 
-  --accent: oklch(0.30 0.02 255);
-  --accent-foreground: oklch(0.97 0.01 260);
+  --muted: oklch(0.27 0 0);
+  --muted-foreground: oklch(0.7 0 0); /* White/40 */
 
-  --destructive: oklch(0.70 0.19 22);
-  --destructive-foreground: oklch(0.17 0.02 260);
+  --accent: oklch(0.3 0.02 290);
+  --accent-foreground: oklch(0.97 0 0);
 
-  --border: oklch(0.30 0.02 260);
-  --input: oklch(0.32 0.02 260);
-  --ring: oklch(0.66 0.15 255);
+  --destructive: oklch(0.7 0.19 22);
+  --destructive-foreground: oklch(0.18 0 0);
+
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.32 0 0);
+  --ring: oklch(0.8 0.08 290);
+
+  --sidebar: oklch(0.22 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.8 0.08 290);
+  --sidebar-primary-foreground: oklch(0.18 0 0);
+  --sidebar-accent: oklch(0.3 0.02 290);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(0.3 0 0);
+  --sidebar-ring: oklch(0.8 0.08 290);
 }
 
 /* Map tokens to Tailwind's theme so utilities are generated from them. */
@@ -70,6 +107,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -84,10 +123,39 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /*
+   * SnowUI "Color styles" — fixed pastel accents + tints (identical in light
+   * and dark). Use for status labels, tags, and chart series. Exact SnowUI hex.
+   */
+  --color-accent-cyan: #a0bce8;
+  --color-accent-mint: #6be6d3;
+  --color-accent-blue: #7dbbff;
+  --color-accent-purple: #b899eb;
+  --color-accent-green: #71dd8c;
+  --color-tint-blue: #e6f1fd; /* SnowUI Color 1 */
+  --color-tint-lavender: #edeefc; /* SnowUI Color 2 */
+
+  /* Chart series aliases (shadcn convention) mapped onto the pastels. */
+  --color-chart-1: #7dbbff;
+  --color-chart-2: #6be6d3;
+  --color-chart-3: #b899eb;
+  --color-chart-4: #71dd8c;
+  --color-chart-5: #a0bce8;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
 }
 
 @layer base {
