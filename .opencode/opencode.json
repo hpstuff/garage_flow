@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "figma": {
+      "type": "remote",
+      "url": "https://mcp.figma.com/mcp",
+      "enabled": true,
+      "oauth": {
+        "clientId": "Bp1PzHVGCWyylTNLMxiKKd",
+        "clientSecret": "7GL0kbn2YRVU1XFav1MBAWpKOWX3atditLEJFXw8"
+      }
+    }
+  }
+}
