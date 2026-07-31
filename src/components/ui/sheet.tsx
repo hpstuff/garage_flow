@@ -72,12 +72,17 @@ export function SheetContent({ side = "right", className, children, ...props }: 
 }
 
 export function SheetHeader({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("flex flex-col space-y-2 text-center sm:text-left", className)} {...props} />;
+  return (
+    <div className={cn("flex flex-col space-y-2 text-center sm:text-left", className)} {...props} />
+  );
 }
 
 export function SheetFooter({ className, ...props }: ComponentProps<"div">) {
   return (
-    <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)} {...props} />
+    <div
+      className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+      {...props}
+    />
   );
 }
 
