@@ -94,7 +94,7 @@ Components are ported group by group, one PR per group. For each component:
 | 1 ✅  | Foundation     | tokens, Button, Card, Input, Label, Badge, Separator  |
 | 2 ✅  | Forms          | Select, Checkbox, Radio, Switch, Textarea, Field      |
 | 3     | Data display   | Table, Avatar, Tabs, Tooltip, Progress                |
-| 4     | Navigation     | Sidebar/Nav, Breadcrumb, Dropdown menu, Pagination    |
+| 4 ✅  | Navigation     | Sidebar/Nav, Breadcrumb, Dropdown menu, Pagination    |
 | 5     | Overlays       | Dialog, Sheet, Popover, Toast/Notification            |
 | 6     | Charts         | chart wrappers using `chart-1..5`                     |
 
@@ -118,3 +118,30 @@ and the error state (`aria-invalid`) uses a `destructive` border.
   `error` string, so it drops into react-hook-form + Zod (ADR-0016) without adding
   a form-library dependency. Checkbox/Switch, whose label sits beside the control,
   compose `Label` + control inline instead of using `Field`'s vertical layout.
+
+### Phase 4 — Navigation
+
+`Sidebar`, `Breadcrumb`, `DropdownMenu`, and `Pagination` provide the app's
+navigation surface. All are token-driven using the existing `--sidebar-*` tokens
+and standard semantic tokens (`popover`, `border`, `accent`).
+
+- **Sidebar** — left navigation panel using `--sidebar-*` tokens. Composes a
+  context provider (`SidebarProvider`) for open/collapsed state, plus presentational
+  primitives: `Sidebar`, `SidebarHeader`, `SidebarContent`, `SidebarFooter`,
+  `SidebarGroup`, `SidebarMenu`, `SidebarMenuLink` (with `active` variant for the
+  current page), `SidebarTrigger` (hamburger toggle), and `SidebarSeparator`.
+  Width is 256px expanded, 64px collapsed.
+- **Breadcrumb** — hierarchical trail showing the user's location. Uses
+  `text-muted-foreground` for inactive items, `text-foreground` for the current
+  page, and `ChevronRight` separators. Includes `BreadcrumbEllipsis` for
+  truncated paths.
+- **DropdownMenu** — backed by `@radix-ui/react-dropdown-menu` (ADR-0017).
+  Supports items, checkbox/radio items, sub-menus, labels, separators, and
+  keyboard shortcuts. Uses `popover` surface, `accent` fill on hover/selected.
+- **Pagination** — page navigation controls using `buttonVariants` for consistent
+  affordance. `PaginationLink` supports `isActive` (renders as `outline` variant)
+  and `size` props. Includes `PaginationPrevious`, `PaginationNext`, and
+  `PaginationEllipsis`.
+
+All navigation components add **no new tokens** — they reuse existing sidebar,
+popover, border, and accent tokens.
