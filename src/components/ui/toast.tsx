@@ -55,10 +55,7 @@ export function Toast({
   return <ToastPrimitive.Root className={cn(toastVariants({ variant }), className)} {...props} />;
 }
 
-export function ToastAction({
-  className,
-  ...props
-}: ComponentProps<typeof ToastPrimitive.Action>) {
+export function ToastAction({ className, ...props }: ComponentProps<typeof ToastPrimitive.Action>) {
   return (
     <ToastPrimitive.Action
       className={cn(
@@ -70,10 +67,7 @@ export function ToastAction({
   );
 }
 
-export function ToastClose({
-  className,
-  ...props
-}: ComponentProps<typeof ToastPrimitive.Close>) {
+export function ToastClose({ className, ...props }: ComponentProps<typeof ToastPrimitive.Close>) {
   return (
     <ToastPrimitive.Close
       className={cn(
@@ -96,9 +90,7 @@ export function ToastDescription({
   className,
   ...props
 }: ComponentProps<typeof ToastPrimitive.Description>) {
-  return (
-    <ToastPrimitive.Description className={cn("text-sm opacity-90", className)} {...props} />
-  );
+  return <ToastPrimitive.Description className={cn("text-sm opacity-90", className)} {...props} />;
 }
 
 export type ToastProps = ComponentProps<typeof Toast>;

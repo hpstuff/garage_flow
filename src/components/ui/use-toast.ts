@@ -65,9 +65,7 @@ export function reducer(state: State, action: Action): State {
       return {
         ...state,
         toasts: state.toasts.map((t) =>
-          t.id === toastId || toastId === undefined
-            ? { ...t, open: false }
-            : t,
+          t.id === toastId || toastId === undefined ? { ...t, open: false } : t,
         ),
       };
     }
@@ -92,9 +90,14 @@ function toast({ ...props }: Omit<ToasterToast, "id">) {
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
   dispatch({
     type: "ADD_TOAST",
-    toast: { ...props, id, open: true, onOpenChange: (open: boolean) => {
-      if (!open) dismiss();
-    }},
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open: boolean) => {
+        if (!open) dismiss();
+      },
+    },
   });
   return { id, dismiss, update };
 }
@@ -110,7 +113,11 @@ function useToast() {
     };
   }, []);
 
-  return { ...state, toast, dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }) };
+  return {
+    ...state,
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+  };
 }
 
-export { useToast, toast };
+export { toast, useToast };
