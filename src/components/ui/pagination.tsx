@@ -34,7 +34,7 @@ export function PaginationLink({
   ...props
 }: ComponentProps<"a"> & {
   isActive?: boolean;
-  size?: "sm" | "icon";
+  size?: "default" | "sm" | "lg" | "icon";
 }) {
   return (
     <a
