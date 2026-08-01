@@ -14,17 +14,17 @@ import { CUSTOMER_KINDS } from "../../db/schema";
  * state. Optionally enforces an email shape, but only on a non-empty value.
  */
 function optionalText(max: number, opts: { email?: boolean } = {}) {
-  let base = z.string().trim().max(max, `Полето може да е най-много ${max} знака.`);
-  if (opts.email) {
-    base = base.pipe(z.email("Невалиден имейл адрес."));
-  }
-  return z.preprocess(
-    (value) =>
-      value === null || value === undefined || (typeof value === "string" && value.trim() === "")
-        ? undefined
-        : value,
-    base.optional(),
-  ).transform((value) => value ?? null);
+  const capped = z.string().trim().max(max, `Полето може да е най-много ${max} знака.`);
+  const base = opts.email ? capped.pipe(z.email("Невалиден имейл адрес.")) : capped;
+  return z
+    .preprocess(
+      (value) =>
+        value === null || value === undefined || (typeof value === "string" && value.trim() === "")
+          ? undefined
+          : value,
+      base.optional(),
+    )
+    .transform((value) => value ?? null);
 }
 
 /** The editable fields shared by create and edit. */
