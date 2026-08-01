@@ -1,9 +1,9 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
-import { LineChart } from "@/components/ui/line-chart";
 import { BarChart } from "@/components/ui/bar-chart";
+import { Card } from "@/components/ui/card";
 import { DonutChart } from "@/components/ui/donut-chart";
+import { LineChart } from "@/components/ui/line-chart";
 
 const monthlyData = [
   { month: "Jan", revenue: 4000, expenses: 2400 },
@@ -56,9 +56,7 @@ export default function ChartsDemoPage() {
         <h2 className="text-xl font-semibold mb-4">Bar Chart — Service Categories</h2>
         <BarChart
           data={categoryData}
-          bars={[
-            { dataKey: "value", name: "Count", color: "chart-3" },
-          ]}
+          bars={[{ dataKey: "value", name: "Count", color: "chart-3" }]}
           xAxisKey="category"
           height={350}
         />
@@ -66,10 +64,7 @@ export default function ChartsDemoPage() {
 
       <Card className="p-6">
         <h2 className="text-xl font-semibold mb-4">Donut Chart — Service Distribution</h2>
-        <DonutChart
-          data={serviceData}
-          height={350}
-        />
+        <DonutChart data={serviceData} height={350} />
       </Card>
 
       <Card className="p-6">
