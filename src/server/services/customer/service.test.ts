@@ -27,9 +27,9 @@ describe("customer service — validation (no DB)", () => {
   });
 
   it("rejects an unknown kind", async () => {
-    await expect(
-      createCustomer(s, { kind: "robot", name: "X" }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(createCustomer(s, { kind: "robot", name: "X" })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 
   it("rejects unexpected keys (strict schema)", async () => {

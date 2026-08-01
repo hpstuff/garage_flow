@@ -11,7 +11,7 @@
 import { and, asc, eq, ilike, or } from "drizzle-orm";
 import { NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
-import { customer, type CustomerKind, location } from "./schema";
+import { type CustomerKind, customer, location } from "./schema";
 import type { Scope } from "./scope";
 
 export interface ScopedLocation {
