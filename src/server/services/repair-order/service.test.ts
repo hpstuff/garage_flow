@@ -14,7 +14,14 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../db/client";
-import { customer, KANBAN_STAGES, location, mechanic, organization, vehicle } from "../../db/schema";
+import {
+  customer,
+  KANBAN_STAGES,
+  location,
+  mechanic,
+  organization,
+  vehicle,
+} from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { ConflictError, NotFoundError, ValidationError } from "../../domain/errors";
 import {
