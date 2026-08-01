@@ -93,9 +93,9 @@ Components are ported group by group, one PR per group. For each component:
 | ----- | -------------- | ----------------------------------------------------- |
 | 1 ✅  | Foundation     | tokens, Button, Card, Input, Label, Badge, Separator  |
 | 2 ✅  | Forms          | Select, Checkbox, Radio, Switch, Textarea, Field      |
-| 3     | Data display   | Table, Avatar, Tabs, Tooltip, Progress                |
+| 3 ✅  | Data display   | Table, Avatar, Tabs, Tooltip, Progress                |
 | 4 ✅  | Navigation     | Sidebar/Nav, Breadcrumb, Dropdown menu, Pagination    |
-| 5     | Overlays       | Dialog, Sheet, Popover, Toast/Notification            |
+| 5 ✅  | Overlays       | Dialog, Sheet, Popover, Toast/Notification            |
 | 6     | Charts         | chart wrappers using `chart-1..5`                     |
 
 Radix primitives (per ADR-0017) can back the interactive components in phases 2–5;
@@ -145,3 +145,34 @@ and standard semantic tokens (`popover`, `border`, `accent`).
 
 All navigation components add **no new tokens** — they reuse existing sidebar,
 popover, border, and accent tokens.
+
+### Phase 5 — Overlays
+
+`Dialog`, `Sheet`, `Popover`, and `Toast` provide modal and non-modal overlay
+surfaces for confirmations, side panels, floating content, and notifications.
+All are token-driven using existing `card`, `popover`, `border`, and semantic
+tokens.
+
+- **Dialog** — modal overlay backed by `@radix-ui/react-dialog` (ADR-0017).
+  Uses `card` surface with `border`, centered on screen with a backdrop.
+  Includes `DialogContent`, `DialogHeader`, `DialogFooter`, `DialogTitle`,
+  `DialogDescription`, and `DialogClose` components. The close button (X icon)
+  is positioned absolutely in the top-right corner.
+- **Sheet** — side panel overlay using the same Dialog primitive. Slides in
+  from `top`, `right` (default), `bottom`, or `left` via the `side` variant.
+  Uses `card` surface with directional borders. Components mirror Dialog:
+  `SheetContent`, `SheetHeader`, `SheetFooter`, `SheetTitle`,
+  `SheetDescription`. Width is 75% (max 384px on sm+) for left/right sheets.
+- **Popover** — non-modal overlay backed by `@radix-ui/react-popover`.
+  Uses `popover` surface with `border`, positioned relative to its trigger.
+  No backdrop, closes on outside click. Includes `PopoverContent` (with
+  configurable `align` and `sideOffset`) and `PopoverAnchor` for advanced
+  positioning.
+- **Toast** — notification overlay backed by `@radix-ui/react-toast`.
+  Token-driven variants: `default` (card surface), `destructive` (error state),
+  `success` (accent-green tint). Slides in from bottom-right. Includes
+  `Toaster` (viewport renderer), `useToast` hook for imperative API, and
+  `ToastAction` for interactive buttons. Use `ToastProvider` at app root.
+
+All overlay components add **no new tokens** — they reuse existing card,
+popover, border, destructive, and accent-green tokens.
