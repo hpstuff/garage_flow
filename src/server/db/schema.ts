@@ -8,7 +8,7 @@
  * and reached only through ScopedDb (ADR-0013).
  */
 
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { organization } from "./auth-schema";
 
 export const location = pgTable("location", {
@@ -66,6 +66,57 @@ export const customer = pgTable("customer", {
 });
 
 export type CustomerRow = typeof customer.$inferSelect;
+
+/**
+ * A **Vehicle** is a specific car or motorcycle the garage services
+ * (CONTEXT.md). ADR-0001 scopes the MVP to general repair, so `kind` is limited
+ * to those two — no tire/body/fleet variants.
+ */
+export const VEHICLE_KINDS = ["car", "motorcycle"] as const;
+export type VehicleKind = (typeof VEHICLE_KINDS)[number];
+export const vehicleKind = pgEnum("vehicle_kind", VEHICLE_KINDS);
+
+/**
+ * Vehicle (GF-05). Identified primarily by registration `plate` and `vin`
+ * (CONTEXT.md); the plate/VIN pair is the search wedge (ADR-0008). Scoped to a
+ * **Location** like every operational row (ADR-0003) and reached only through
+ * ScopedDb (ADR-0013).
+ *
+ * `customerId` is the **current owner** — a pointer, not history. Ownership can
+ * change over time (resale): reassigning it is a plain update. The Service
+ * History (GF-18) keys off the Vehicle via Repair Orders, never off this owner
+ * link, so a Vehicle keeps its full history across owners. There is deliberately
+ * no hard-delete path, matching Customer.
+ */
+export const vehicle = pgTable("vehicle", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The current-owner Customer. Cascades so tearing down an Account is clean. */
+  customerId: uuid("customer_id")
+    .notNull()
+    .references(() => customer.id, { onDelete: "cascade" }),
+  kind: vehicleKind("kind").notNull().default("car"),
+  /** Registration plate — the everyday identifier the front desk searches by. */
+  plate: text("plate"),
+  /** Vehicle Identification Number — the stable, globally-unique identifier. */
+  vin: text("vin"),
+  make: text("make"),
+  model: text("model"),
+  /** Model/manufacture year. */
+  year: integer("year"),
+  color: text("color"),
+  /** Internal free-text note, never shown to the Customer. */
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type VehicleRow = typeof vehicle.$inferSelect;
 
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
