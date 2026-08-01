@@ -96,7 +96,7 @@ Components are ported group by group, one PR per group. For each component:
 | 3 ✅  | Data display   | Table, Avatar, Tabs, Tooltip, Progress                |
 | 4 ✅  | Navigation     | Sidebar/Nav, Breadcrumb, Dropdown menu, Pagination    |
 | 5 ✅  | Overlays       | Dialog, Sheet, Popover, Toast/Notification            |
-| 6     | Charts         | chart wrappers using `chart-1..5`                     |
+| 6 ✅  | Charts         | LineChart, BarChart, DonutChart                       |
 
 Radix primitives (per ADR-0017) can back the interactive components in phases 2–5;
 add the `@radix-ui/*` packages as each group needs them.
@@ -176,3 +176,49 @@ tokens.
 
 All overlay components add **no new tokens** — they reuse existing card,
 popover, border, destructive, and accent-green tokens.
+
+### Phase 6 — Charts
+
+`LineChart`, `BarChart`, and `DonutChart` provide data visualization using the
+**Recharts** library (lightweight, self-hostable, React-native). All charts
+are token-driven using the existing `chart-1..5` color aliases that map to
+the SnowUI pastel palette.
+
+- **LineChart** — time-series and trend visualization. Accepts an array of
+  data objects, multiple line series via the `lines` prop (each with `dataKey`,
+  optional `name`, and `color` mapped to `chart-1..5`), and the `xAxisKey` for
+  the horizontal axis. Supports optional grid (`showGrid`), legend (`showLegend`),
+  and custom `height`. Uses `monotone` curves with 2px stroke width and dot
+  markers. Colors auto-cycle through `chart-1..5` if not specified.
+- **BarChart** — categorical comparisons and distributions. Similar API to
+  LineChart but with `bars` prop instead of `lines`. Supports both `horizontal`
+  (default) and `vertical` layouts. Bars have 4px top border radius and use
+  the `chart-1..5` palette. Hover cursor shows accent fill.
+- **DonutChart** — proportional relationships with a hollow center. Takes
+  `data` as an array of `{name, value}` objects. Configurable `innerRadius`
+  (default 60) and `outerRadius` (default 100) for the donut thickness.
+  Optional `colors` array to override the default `chart-1..5` sequence.
+  Uses 2px padding angle between segments and includes label lines.
+
+All chart components:
+- Use CSS token references (e.g., `hsl(var(--color-chart-1))`) so they adapt
+  to light/dark themes automatically
+- Style tooltips with `popover` surface, `border`, and `foreground` colors
+- Style axes and grid lines with `border` and `muted-foreground` colors
+- Accept a `className` prop for layout control (e.g., positioning within a card)
+- Default to 300px height but accept a custom `height` prop
+- Add **no new tokens** — they consume the `chart-1..5` aliases already defined
+  in `globals.css`
+
+Example usage:
+
+```tsx
+<LineChart
+  data={monthlyData}
+  lines={[
+    { dataKey: "revenue", name: "Revenue", color: "chart-1" },
+    { dataKey: "expenses", name: "Expenses", color: "chart-2" },
+  ]}
+  xAxisKey="month"
+/>
+```
