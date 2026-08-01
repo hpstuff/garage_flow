@@ -14,10 +14,18 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../db/client";
-import { customer, location, mechanic, organization, vehicle } from "../../db/schema";
+import { customer, KANBAN_STAGES, location, mechanic, organization, vehicle } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
-import { NotFoundError, ValidationError } from "../../domain/errors";
-import { createRepairOrder, getRepairOrder, listRepairOrders, updateRepairOrder } from "./service";
+import { ConflictError, NotFoundError, ValidationError } from "../../domain/errors";
+import {
+  createRepairOrder,
+  getKanbanBoard,
+  getRepairOrder,
+  listRepairOrders,
+  moveRepairOrderStage,
+  setHiddenStages,
+  updateRepairOrder,
+} from "./service";
 
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
@@ -53,6 +61,21 @@ describe("repair order service — validation (no DB)", () => {
     await expect(
       updateRepairOrder(s, { id: "nope", vehicleId: randomUUID() }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a stage move with a non-uuid id or an unknown stage (GF-10)", async () => {
+    await expect(
+      moveRepairOrderStage(s, { id: "nope", stage: "repairing" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      moveRepairOrderStage(s, { id: randomUUID(), stage: "not_a_stage" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects hiding a stage that is not one of the fixed six (GF-10)", async () => {
+    await expect(setHiddenStages(s, { stages: ["not_a_stage"] })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 });
 
@@ -231,5 +254,97 @@ describe.skipIf(!hasDb)("repair order service — integration (real Postgres, AD
     // Account B never sees Account A's orders in its own list.
     const theirs = await listRepairOrders(intruder, {});
     expect(theirs.every((ro) => ro.id !== mine.id)).toBe(true);
+  });
+
+  // --- Kanban Stage (GF-10) ---
+
+  it("opens in the `waiting` stage (GF-10)", async () => {
+    const created = await createRepairOrder(scope(accountA, locationA), { vehicleId: vehicleA });
+    expect(created.stage).toBe("waiting");
+  });
+
+  it("moves a Repair Order between stages, leaving invoice/payment untouched (ADR-0002)", async () => {
+    const created = await createRepairOrder(scope(accountA, locationA), { vehicleId: vehicleA });
+
+    const diagnosing = await moveRepairOrderStage(scope(accountA, locationA), {
+      id: created.id,
+      stage: "diagnosing",
+    });
+    expect(diagnosing.stage).toBe("diagnosing");
+
+    const ready = await moveRepairOrderStage(scope(accountA, locationA), {
+      id: created.id,
+      stage: "ready",
+    });
+    expect(ready.stage).toBe("ready");
+    // Stage is independent of the billing references — they never change here.
+    expect(ready.invoiceStatus).toBe("not_invoiced");
+    expect(ready.paymentStatus).toBe("unpaid");
+  });
+
+  it("treats `delivered` as terminal — a delivered order cannot move on (GF-10)", async () => {
+    const created = await createRepairOrder(scope(accountA, locationA), { vehicleId: vehicleA });
+    const delivered = await moveRepairOrderStage(scope(accountA, locationA), {
+      id: created.id,
+      stage: "delivered",
+    });
+    expect(delivered.stage).toBe("delivered");
+
+    await expect(
+      moveRepairOrderStage(scope(accountA, locationA), { id: created.id, stage: "repairing" }),
+    ).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("cannot move a Repair Order across the tenant boundary (GF-10)", async () => {
+    const mine = await createRepairOrder(scope(accountA, locationA), { vehicleId: vehicleA });
+    await expect(
+      moveRepairOrderStage(scope(accountB, locationB), { id: mine.id, stage: "repairing" }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("builds a board of the six fixed stages, in order, grouping orders by stage (GF-10)", async () => {
+    const created = await createRepairOrder(scope(accountA, locationA), { vehicleId: vehicleA });
+    await moveRepairOrderStage(scope(accountA, locationA), {
+      id: created.id,
+      stage: "repairing",
+    });
+
+    const board = await getKanbanBoard(scope(accountA, locationA));
+    expect(board.columns.map((column) => column.stage)).toEqual([...KANBAN_STAGES]);
+
+    const repairing = board.columns.find((column) => column.stage === "repairing");
+    expect(repairing?.orders.some((order) => order.id === created.id)).toBe(true);
+    // The order lives in exactly one column — its current stage.
+    const elsewhere = board.columns
+      .filter((column) => column.stage !== "repairing")
+      .flatMap((column) => column.orders);
+    expect(elsewhere.some((order) => order.id === created.id)).toBe(false);
+  });
+
+  it("hides stages per Location, de-duplicating and staying scope-isolated (GF-10)", async () => {
+    // Defaults to nothing hidden.
+    const before = await getKanbanBoard(scope(accountA, locationA));
+    expect(before.hiddenStages).toEqual([]);
+
+    // Hide a couple of stages; duplicates collapse to a clean set.
+    const stored = await setHiddenStages(scope(accountA, locationA), {
+      stages: ["ready", "ready", "delivered"],
+    });
+    expect(stored).toEqual(["ready", "delivered"]);
+
+    const board = await getKanbanBoard(scope(accountA, locationA));
+    expect(new Set(board.hiddenStages)).toEqual(new Set(["ready", "delivered"]));
+    expect(board.columns.find((column) => column.stage === "ready")?.hidden).toBe(true);
+    expect(board.columns.find((column) => column.stage === "delivered")?.hidden).toBe(true);
+    expect(board.columns.find((column) => column.stage === "waiting")?.hidden).toBe(false);
+    // Every stage still exists — hiding never removes or reorders the fixed set.
+    expect(board.columns).toHaveLength(KANBAN_STAGES.length);
+
+    // Account B's board is untouched by Account A's configuration.
+    const theirBoard = await getKanbanBoard(scope(accountB, locationB));
+    expect(theirBoard.hiddenStages).toEqual([]);
+
+    // Reset so later assertions see a clean board.
+    await setHiddenStages(scope(accountA, locationA), { stages: [] });
   });
 });
