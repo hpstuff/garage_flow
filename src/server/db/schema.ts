@@ -17,6 +17,8 @@ export const location = pgTable("location", {
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  /** VAT configuration (rates, registration number). Filled in by GF-12. */
+  vatConfig: text("vat_config"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
