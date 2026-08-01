@@ -50,6 +50,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             >
               {tNav("vehicles")}
             </Link>
+            <Link
+              href="/mechanics"
+              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+            >
+              {tNav("mechanics")}
+            </Link>
           </nav>
         </aside>
         <main className="flex-1 p-6">{children}</main>
