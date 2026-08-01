@@ -1,0 +1,98 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { formatDate } from "@/lib/format";
+import { getRepairOrderAction } from "../_actions/repair-order-actions";
+import { invoiceStatusVariant, paymentStatusVariant } from "../_components/status";
+
+/**
+ * Repair Order detail (GF-08). Shows the Complaint and Diagnosis as distinct
+ * fields (ADR-0009), the Vehicle and owner, the optional lead Mechanic, and the
+ * invoice/payment references (ADR-0002) — the latter read-only here, since they
+ * are set by GF-14/GF-15, never by editing the order. A 404 for an order outside
+ * the caller's scope, never a cross-tenant read.
+ */
+export default async function RepairOrderDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const t = await getTranslations("repairOrders.detail");
+  const tStatus = await getTranslations("repairOrders");
+  const { id } = await params;
+
+  const result = await getRepairOrderAction(id);
+  if (!result.ok) {
+    if (result.error === "UNAUTHENTICATED") {
+      redirect("/login");
+    }
+    notFound();
+  }
+
+  const order = result.data;
+  const vehicleTitle = order.vehiclePlate ?? order.vehicleVin ?? t("empty");
+  const vehicleDescription = [order.vehicleMake, order.vehicleModel].filter(Boolean).join(" ");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-1">
+          <Link href="/repair-orders" className="text-sm text-muted-foreground hover:underline">
+            ← {t("back")}
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">{vehicleTitle}</h1>
+            <Badge variant={invoiceStatusVariant[order.invoiceStatus]}>
+              {tStatus(`invoiceStatus.${order.invoiceStatus}`)}
+            </Badge>
+            <Badge variant={paymentStatusVariant[order.paymentStatus]}>
+              {tStatus(`paymentStatus.${order.paymentStatus}`)}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground">
+            {[vehicleDescription, order.customerName].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        <Link
+          href={`/repair-orders/${order.id}/edit`}
+          className={buttonVariants({ variant: "outline" })}
+        >
+          {t("edit")}
+        </Link>
+      </div>
+
+      <Card>
+        <CardContent className="grid gap-4 py-6 sm:grid-cols-2">
+          <Detail label={t("vehicle")}>
+            <Link href={`/vehicles/${order.vehicleId}`} className="hover:underline">
+              {vehicleTitle}
+            </Link>
+          </Detail>
+          <Detail label={t("owner")}>{order.customerName}</Detail>
+          <Detail label={t("mechanic")}>{order.mechanicName ?? t("noLead")}</Detail>
+          <Detail label={t("createdAt")}>{formatDate(order.createdAt)}</Detail>
+          <Detail label={t("complaint")} full>
+            {order.complaint ?? t("empty")}
+          </Detail>
+          <Detail label={t("diagnosis")} full>
+            {order.diagnosis ?? t("empty")}
+          </Detail>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/** One label/value pair in the detail grid; `full` spans both columns for prose. */
+function Detail({ label, children, full }: { label: string; children: ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? "space-y-0.5 sm:col-span-2" : "space-y-0.5"}>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium whitespace-pre-wrap">{children}</dd>
+    </div>
+  );
+}

@@ -703,10 +703,7 @@ export class ScopedDb {
    * `invoiceStatus`/`paymentStatus` are intentionally never touched here — they
    * are set by GF-14/GF-15 (ADR-0002).
    */
-  async updateRepairOrder(
-    id: string,
-    values: RepairOrderWriteValues,
-  ): Promise<ScopedRepairOrder> {
+  async updateRepairOrder(id: string, values: RepairOrderWriteValues): Promise<ScopedRepairOrder> {
     await this.#assertVehicleInScope(values.vehicleId);
     await this.#assertMechanicInScope(values.mechanicId);
 

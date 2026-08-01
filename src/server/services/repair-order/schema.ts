@@ -62,8 +62,5 @@ export type UpdateRepairOrderInput = z.infer<typeof updateRepairOrderSchema>;
 
 export const getRepairOrderSchema = z.object({ id: z.uuid() }).strict();
 
-export const listRepairOrdersSchema = z
-  .object({ vehicleId: z.uuid() })
-  .strict()
-  .partial();
+export const listRepairOrdersSchema = z.object({ vehicleId: z.uuid() }).strict().partial();
 export type ListRepairOrdersInput = z.infer<typeof listRepairOrdersSchema>;
