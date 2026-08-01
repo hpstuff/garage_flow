@@ -11,7 +11,14 @@
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
-import { type CustomerKind, customer, location, type VehicleKind, vehicle } from "./schema";
+import {
+  type CustomerKind,
+  customer,
+  location,
+  mechanic,
+  type VehicleKind,
+  vehicle,
+} from "./schema";
 import type { Scope } from "./scope";
 
 export interface ScopedLocation {
@@ -106,6 +113,40 @@ const vehicleColumns = {
   note: vehicle.note,
   createdAt: vehicle.createdAt,
   updatedAt: vehicle.updatedAt,
+} as const;
+
+/**
+ * A Mechanic as it crosses the service boundary (GF-07). `userId` is the
+ * optional Phase-2 login link — exposed here so future consumers (the Repair
+ * Order lead picker, Labor Line Items) can read it, though the MVP never sets it.
+ */
+export interface ScopedMechanic {
+  id: string;
+  userId: string | null;
+  name: string;
+  note: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The Mechanic fields a caller may set — scope-derived columns are never here.
+ * `userId` is deliberately excluded: linking a Mechanic to a login User is
+ * Phase 2 (GF-07), so the MVP create/edit path writes only `name` + `note`.
+ */
+export interface MechanicWriteValues {
+  name: string;
+  note: string | null;
+}
+
+/** Explicit column projection — never return raw rows (ADR-0016). */
+const mechanicColumns = {
+  id: mechanic.id,
+  userId: mechanic.userId,
+  name: mechanic.name,
+  note: mechanic.note,
+  createdAt: mechanic.createdAt,
+  updatedAt: mechanic.updatedAt,
 } as const;
 
 /**
@@ -404,5 +445,79 @@ export class ScopedDb {
       throw new NotFoundError("Vehicle not found");
     }
     return { ...row, customerName };
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Mechanic predicate. */
+  #mechanicScope() {
+    return and(
+      eq(mechanic.accountId, this.scope.accountId),
+      eq(mechanic.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * Mechanics in the current Location, ordered by name — the list the front desk
+   * browses and the source the future Repair Order lead / Labor Line Item pickers
+   * draw from. An optional `search` matches the name case-insensitively.
+   */
+  async listMechanics(search: string | null): Promise<ScopedMechanic[]> {
+    const term = search?.trim();
+    const where = term
+      ? and(this.#mechanicScope(), ilike(mechanic.name, `%${term}%`))
+      : this.#mechanicScope();
+
+    return this.#db.select(mechanicColumns).from(mechanic).where(where).orderBy(asc(mechanic.name));
+  }
+
+  /** A single Mechanic, or `NotFoundError` if it is not in the caller's scope. */
+  async getMechanic(id: string): Promise<ScopedMechanic> {
+    const rows = await this.#db
+      .select(mechanicColumns)
+      .from(mechanic)
+      .where(and(eq(mechanic.id, id), this.#mechanicScope()))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Mechanic not found");
+    }
+    return row;
+  }
+
+  /** Create a Mechanic in the current Account + Location. */
+  async createMechanic(values: MechanicWriteValues): Promise<ScopedMechanic> {
+    const rows = await this.#db
+      .insert(mechanic)
+      .values({
+        accountId: this.scope.accountId,
+        locationId: this.scope.locationId,
+        ...values,
+      })
+      .returning(mechanicColumns);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Mechanic could not be created");
+    }
+    return row;
+  }
+
+  /**
+   * Update a Mechanic within the caller's scope. The `WHERE` is constrained by
+   * `accountId` + `locationId`, so a Mechanic in another Account's Location is
+   * invisible and updating it raises `NotFoundError`, never a cross-tenant write.
+   */
+  async updateMechanic(id: string, values: MechanicWriteValues): Promise<ScopedMechanic> {
+    const rows = await this.#db
+      .update(mechanic)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(eq(mechanic.id, id), this.#mechanicScope()))
+      .returning(mechanicColumns);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Mechanic not found");
+    }
+    return row;
   }
 }
