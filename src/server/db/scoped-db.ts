@@ -15,6 +15,8 @@ import {
   type CustomerKind,
   customer,
   type InvoiceStatus,
+  type LineItemType,
+  lineItem,
   location,
   mechanic,
   type PaymentStatus,
@@ -201,6 +203,62 @@ const repairOrderColumns = {
   paymentStatus: repairOrder.paymentStatus,
   createdAt: repairOrder.createdAt,
   updatedAt: repairOrder.updatedAt,
+} as const;
+
+/**
+ * A Line Item as it crosses the service boundary (GF-09). Carries the attributed
+ * Mechanic's name (joined, null on Part lines) for display. The money/quantity
+ * columns keep their exact integer encodings (`quantity` in thousandths,
+ * `unitPrice`/`amount` in minor units, `vatRate` in basis points — see schema.ts);
+ * the formatting layer renders them.
+ */
+export interface ScopedLineItem {
+  id: string;
+  repairOrderId: string;
+  type: LineItemType;
+  mechanicId: string | null;
+  mechanicName: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  amount: number;
+  currency: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The Line Item fields a caller may set — scope-derived columns are never here,
+ * and `currency` is a database default (BGN in the MVP, ADR-0011). `amount` is
+ * computed by the service from `quantity` × `unitPrice`, never taken raw from the
+ * caller, so a line total can never disagree with its inputs.
+ */
+export interface LineItemWriteValues {
+  repairOrderId: string;
+  type: LineItemType;
+  mechanicId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  amount: number;
+}
+
+/** Explicit base column projection — the joined Mechanic name is added per query. */
+const lineItemColumns = {
+  id: lineItem.id,
+  repairOrderId: lineItem.repairOrderId,
+  type: lineItem.type,
+  mechanicId: lineItem.mechanicId,
+  description: lineItem.description,
+  quantity: lineItem.quantity,
+  unitPrice: lineItem.unitPrice,
+  vatRate: lineItem.vatRate,
+  amount: lineItem.amount,
+  currency: lineItem.currency,
+  createdAt: lineItem.createdAt,
+  updatedAt: lineItem.updatedAt,
 } as const;
 
 /**
@@ -718,5 +776,134 @@ export class ScopedDb {
       throw new NotFoundError("Repair order not found");
     }
     return this.getRepairOrder(row.id);
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Line Item predicate. */
+  #lineItemScope() {
+    return and(
+      eq(lineItem.accountId, this.scope.accountId),
+      eq(lineItem.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * Assert a Repair Order is in the caller's scope, or raise `NotFoundError`. An
+   * order from another Account's Location is invisible here, so a Line Item can
+   * never be attached to a cross-tenant order — the FK alone would not stop that.
+   */
+  async #assertRepairOrderInScope(repairOrderId: string): Promise<void> {
+    const rows = await this.#db
+      .select({ id: repairOrder.id })
+      .from(repairOrder)
+      .where(and(eq(repairOrder.id, repairOrderId), this.#repairOrderScope()))
+      .limit(1);
+    if (!rows[0]) {
+      throw new NotFoundError("Repair order not found");
+    }
+  }
+
+  /**
+   * The full Line Item projection: base columns plus the attributed Mechanic's
+   * name. The Mechanic join is left (Part lines have no Mechanic, and a Labor
+   * line's Mechanic can be unlinked), so `mechanicName` is null in those cases.
+   * Constrained to the caller's scope by `where`.
+   */
+  #selectLineItems(where: ReturnType<typeof and>) {
+    return this.#db
+      .select({ ...lineItemColumns, mechanicName: mechanic.name })
+      .from(lineItem)
+      .leftJoin(mechanic, eq(mechanic.id, lineItem.mechanicId))
+      .where(where);
+  }
+
+  /**
+   * A Repair Order's Line Items, oldest first — the order they were entered, which
+   * is how they read on the Work Card and the Invoice. Scoped, so lines on another
+   * Account's order are invisible (an out-of-scope `repairOrderId` yields none).
+   */
+  async listLineItems(repairOrderId: string): Promise<ScopedLineItem[]> {
+    return this.#selectLineItems(
+      and(eq(lineItem.repairOrderId, repairOrderId), this.#lineItemScope()),
+    ).orderBy(asc(lineItem.createdAt), asc(lineItem.id));
+  }
+
+  /** A single Line Item, or `NotFoundError` if it is not in the caller's scope. */
+  async getLineItem(id: string): Promise<ScopedLineItem> {
+    const rows = await this.#selectLineItems(and(eq(lineItem.id, id), this.#lineItemScope())).limit(
+      1,
+    );
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Line item not found");
+    }
+    return row;
+  }
+
+  /**
+   * Add a Line Item to an in-scope Repair Order. The order and the optional
+   * attributed Mechanic are checked for scope membership first, so neither can
+   * point across the tenant boundary.
+   */
+  async createLineItem(values: LineItemWriteValues): Promise<ScopedLineItem> {
+    await this.#assertRepairOrderInScope(values.repairOrderId);
+    await this.#assertMechanicInScope(values.mechanicId);
+
+    const rows = await this.#db
+      .insert(lineItem)
+      .values({
+        accountId: this.scope.accountId,
+        locationId: this.scope.locationId,
+        ...values,
+      })
+      .returning({ id: lineItem.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Line item could not be created");
+    }
+    return this.getLineItem(row.id);
+  }
+
+  /**
+   * Update a Line Item within the caller's scope. The parent order and the
+   * optional attributed Mechanic must also be in scope. The `WHERE` is constrained
+   * by `accountId` + `locationId`, so a line on another Account's order is
+   * invisible and updating it raises `NotFoundError`, never a cross-tenant write.
+   */
+  async updateLineItem(id: string, values: LineItemWriteValues): Promise<ScopedLineItem> {
+    await this.#assertRepairOrderInScope(values.repairOrderId);
+    await this.#assertMechanicInScope(values.mechanicId);
+
+    const rows = await this.#db
+      .update(lineItem)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(eq(lineItem.id, id), this.#lineItemScope()))
+      .returning({ id: lineItem.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Line item not found");
+    }
+    return this.getLineItem(row.id);
+  }
+
+  /**
+   * Remove a Line Item within the caller's scope. Line Items are child rows of a
+   * not-yet-invoiced order (ADR-0002), so a real delete is correct here. The
+   * `WHERE` is scoped, so a line on another Account's order is invisible and
+   * deleting it raises `NotFoundError`.
+   */
+  async deleteLineItem(id: string): Promise<{ id: string }> {
+    const rows = await this.#db
+      .delete(lineItem)
+      .where(and(eq(lineItem.id, id), this.#lineItemScope()))
+      .returning({ id: lineItem.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Line item not found");
+    }
+    return row;
   }
 }

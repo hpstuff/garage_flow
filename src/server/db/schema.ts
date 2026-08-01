@@ -218,6 +218,73 @@ export const repairOrder = pgTable("repair_order", {
 
 export type RepairOrderRow = typeof repairOrder.$inferSelect;
 
+/**
+ * A **Line Item**'s kind (ADR-0009). A **Labor** line attributes to a Mechanic
+ * and carries hours × rate; a **Part** line carries quantity × unit price. Both
+ * feed the Invoice and all revenue/profit reporting (CONTEXT.md).
+ */
+export const LINE_ITEM_TYPES = ["labor", "part"] as const;
+export type LineItemType = (typeof LINE_ITEM_TYPES)[number];
+export const lineItemType = pgEnum("line_item_type", LINE_ITEM_TYPES);
+
+/**
+ * A **Line Item** is one priced row on a Repair Order, typed Labor or Part
+ * (CONTEXT.md, GF-09, ADR-0009). The Invoice and all revenue/profit reporting
+ * build from Line Items — the RO's lead Mechanic is *not* used for labor
+ * attribution.
+ *
+ * Money and quantities are stored exact — never floats (ADR-0011):
+ * - `quantity` is in **thousandths** — the hours on a Labor line (1.5h → 1500),
+ *   the count on a Part line (4 → 4000). Three decimals covers quarter-hours and
+ *   split quantities (e.g. 2.5 L of oil).
+ * - `unitPrice` and `amount` are **integer minor units** of `currency` — the
+ *   hourly rate / unit price, and the computed net line total
+ *   (`amount = round(quantity × unitPrice / 1000)`), (re)set on every write.
+ * - `vatRate` is in **basis points** (20% → 2000), carried per line and consumed
+ *   by GF-12/GF-14 (invoicing); it is *not* folded into `amount`, which is net.
+ *
+ * `mechanicId` is the labor attribution — the Mechanic who performed a Labor line,
+ * so several mechanics can contribute to one order; it is null on Part lines.
+ * `on delete set null` keeps a line (and its money) if a Mechanic is ever
+ * unlinked, matching the RO lead. Unlike the aggregates, a Line Item **is**
+ * deletable: it is a child row of a not-yet-invoiced Repair Order — the Invoice
+ * freezes its lines at issue (ADR-0002), and until then the front desk adds,
+ * edits and removes them freely. Scoped to a **Location** (ADR-0003), reached
+ * only through ScopedDb (ADR-0013).
+ */
+export const lineItem = pgTable("line_item", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Repair Order this line belongs to. Cascades so removing an order is clean. */
+  repairOrderId: uuid("repair_order_id")
+    .notNull()
+    .references(() => repairOrder.id, { onDelete: "cascade" }),
+  type: lineItemType("type").notNull(),
+  /** Labor attribution — the Mechanic who did the work (ADR-0009); null on Part lines. */
+  mechanicId: uuid("mechanic_id").references(() => mechanic.id, { onDelete: "set null" }),
+  /** What the line is, in words — shown on the Work Card and the Invoice. */
+  description: text("description").notNull(),
+  /** Hours (Labor) or count (Part), in thousandths — never a float (ADR-0011). */
+  quantity: integer("quantity").notNull(),
+  /** Hourly rate (Labor) or unit price (Part), in integer minor units of `currency`. */
+  unitPrice: integer("unit_price").notNull(),
+  /** Per-line VAT rate in basis points (20% → 2000), consumed by GF-12/GF-14. */
+  vatRate: integer("vat_rate").notNull(),
+  /** Net line total = round(quantity × unitPrice / 1000), in minor units; set on write. */
+  amount: integer("amount").notNull(),
+  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
+  currency: text("currency").notNull().default("BGN"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type LineItemRow = typeof lineItem.$inferSelect;
+
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
 export * from "./auth-schema";
