@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, formatNumber } from "./format";
+import { formatMoney, formatNumber, formatQuantity, formatVatRate } from "./format";
 
 describe("formatMoney", () => {
   it("treats the amount as integer minor units (ADR-0011/0017)", () => {
@@ -12,5 +12,21 @@ describe("formatMoney", () => {
     const formatted = formatNumber(1234.5);
     expect(formatted).toContain(",5");
     expect(formatted).not.toContain(".5");
+  });
+});
+
+describe("formatQuantity", () => {
+  it("renders thousandths as a decimal, trailing zeros dropped (GF-09)", () => {
+    expect(formatQuantity(1500)).toBe("1,5");
+    expect(formatQuantity(4000)).toBe("4");
+    expect(formatQuantity(2250)).toBe("2,25");
+  });
+});
+
+describe("formatVatRate", () => {
+  it("renders basis points as a percentage (GF-09)", () => {
+    expect(formatVatRate(2000)).toContain("20");
+    expect(formatVatRate(2000)).toContain("%");
+    expect(formatVatRate(900)).toContain("9");
   });
 });

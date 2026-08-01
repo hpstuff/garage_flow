@@ -6,7 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import { computeRepairOrderTotals } from "@/server/services/line-item/service";
+import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
+import { listLineItemsAction } from "../_actions/line-item-actions";
 import { getRepairOrderAction } from "../_actions/repair-order-actions";
+import { LineItemsEditor } from "../_components/line-items-editor";
 import { invoiceStatusVariant, paymentStatusVariant } from "../_components/status";
 
 /**
@@ -36,6 +40,19 @@ export default async function RepairOrderDetailPage({
   const order = result.data;
   const vehicleTitle = order.vehiclePlate ?? order.vehicleVin ?? t("empty");
   const vehicleDescription = [order.vehicleMake, order.vehicleModel].filter(Boolean).join(" ");
+
+  // Line Items (GF-09) and the Mechanics they can attribute to. The RO total is
+  // derived from the lines (ADR-0009), never from the lead Mechanic. A failed
+  // load degrades to an empty editor rather than 404-ing the whole order.
+  const [itemsResult, mechanicsResult] = await Promise.all([
+    listLineItemsAction(order.id),
+    listMechanicsAction(),
+  ]);
+  const lineItems = itemsResult.ok ? itemsResult.data : [];
+  const mechanicOptions = mechanicsResult.ok
+    ? mechanicsResult.data.map((mechanic) => ({ id: mechanic.id, name: mechanic.name }))
+    : [];
+  const totals = computeRepairOrderTotals(lineItems);
 
   return (
     <div className="space-y-6">
@@ -83,6 +100,13 @@ export default async function RepairOrderDetailPage({
           </Detail>
         </CardContent>
       </Card>
+
+      <LineItemsEditor
+        repairOrderId={order.id}
+        items={lineItems}
+        totals={totals}
+        mechanics={mechanicOptions}
+      />
     </div>
   );
 }
