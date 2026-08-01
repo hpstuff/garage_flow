@@ -152,6 +152,72 @@ export const mechanic = pgTable("mechanic", {
 
 export type MechanicRow = typeof mechanic.$inferSelect;
 
+/**
+ * Whether a Repair Order has been turned into an Invoice yet. This is a
+ * **reference only** on the RO (ADR-0002): the Invoice is the immutable
+ * first-class document, and this flag is set by the invoicing slice (GF-14),
+ * never by editing an issued Invoice. `not_invoiced` is the opening state.
+ */
+export const INVOICE_STATUSES = ["not_invoiced", "invoiced"] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+export const invoiceStatus = pgEnum("invoice_status", INVOICE_STATUSES);
+
+/**
+ * Where a Repair Order stands on getting paid. Also a **reference only** on the
+ * RO (ADR-0002): Payments are recorded against the Invoice (GF-15), which sets
+ * this — supporting partial payment. `unpaid` is the opening state.
+ */
+export const PAYMENT_STATUSES = ["unpaid", "partially_paid", "paid"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const paymentStatus = pgEnum("payment_status", PAYMENT_STATUSES);
+
+/**
+ * A **Repair Order** is the central work record for one visit of one Vehicle
+ * (CONTEXT.md, GF-08) — the heart of the app. It captures the **Complaint** (the
+ * customer's words) and the **Diagnosis** (the mechanic's finding) as two
+ * distinct fields (ADR-0009), both optional so an order can be opened the moment
+ * a car arrives and filled in as work proceeds.
+ *
+ * `mechanicId` is the single assigned **lead** Mechanic — an *optional* owner of
+ * the order (ADR-0009); the actual "who did what, for how long" is attributed on
+ * Labor Line Items later, not here. `on delete set null` keeps the order (and its
+ * history) when a Mechanic is unlinked.
+ *
+ * `invoiceStatus` and `paymentStatus` live here as **references only** (ADR-0002):
+ * the Invoice is a separate immutable legal document, and these flags are set by
+ * the invoicing/payment slices (GF-14/GF-15) — never by this create/edit path,
+ * which is why they are absent from the caller-settable write values. Scoped to a
+ * **Location** like every operational row (ADR-0003), reached only through
+ * ScopedDb (ADR-0013). There is no hard-delete path, matching the other tables.
+ */
+export const repairOrder = pgTable("repair_order", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Vehicle this visit is about. Cascades so tearing down an Account is clean. */
+  vehicleId: uuid("vehicle_id")
+    .notNull()
+    .references(() => vehicle.id, { onDelete: "cascade" }),
+  /** Optional lead Mechanic (ADR-0009). Unlinking a Mechanic nulls this, not the order. */
+  mechanicId: uuid("mechanic_id").references(() => mechanic.id, { onDelete: "set null" }),
+  /** The problem in the customer's own words (CONTEXT.md). Distinct from the Diagnosis. */
+  complaint: text("complaint"),
+  /** The mechanic's finding after inspection (CONTEXT.md). Distinct from the Complaint. */
+  diagnosis: text("diagnosis"),
+  /** Reference-only invoicing state (ADR-0002) — set by GF-14, not by editing an Invoice. */
+  invoiceStatus: invoiceStatus("invoice_status").notNull().default("not_invoiced"),
+  /** Reference-only payment state (ADR-0002) — set by GF-15 from Payments on the Invoice. */
+  paymentStatus: paymentStatus("payment_status").notNull().default("unpaid"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type RepairOrderRow = typeof repairOrder.$inferSelect;
+
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
 export * from "./auth-schema";

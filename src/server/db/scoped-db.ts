@@ -8,14 +8,17 @@
  * private to this class.
  */
 
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
   type CustomerKind,
   customer,
+  type InvoiceStatus,
   location,
   mechanic,
+  type PaymentStatus,
+  repairOrder,
   type VehicleKind,
   vehicle,
 } from "./schema";
@@ -147,6 +150,57 @@ const mechanicColumns = {
   note: mechanic.note,
   createdAt: mechanic.createdAt,
   updatedAt: mechanic.updatedAt,
+} as const;
+
+/**
+ * A Repair Order as it crosses the service boundary (GF-08). Carries the joined
+ * Vehicle identity (plate/VIN/make/model) and owner name for display, plus the
+ * optional lead Mechanic's name, so a list or detail needn't fetch them
+ * separately. `invoiceStatus`/`paymentStatus` are surfaced read-only — they are
+ * references set by GF-14/GF-15 (ADR-0002), never through the write path.
+ */
+export interface ScopedRepairOrder {
+  id: string;
+  vehicleId: string;
+  vehiclePlate: string | null;
+  vehicleVin: string | null;
+  vehicleMake: string | null;
+  vehicleModel: string | null;
+  customerName: string;
+  mechanicId: string | null;
+  mechanicName: string | null;
+  complaint: string | null;
+  diagnosis: string | null;
+  invoiceStatus: InvoiceStatus;
+  paymentStatus: PaymentStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The Repair Order fields a caller may set — scope-derived columns are never
+ * here, and `invoiceStatus`/`paymentStatus` are deliberately excluded: they are
+ * reference-only, owned by the invoicing/payment slices (ADR-0002), not this
+ * create/edit path.
+ */
+export interface RepairOrderWriteValues {
+  vehicleId: string;
+  mechanicId: string | null;
+  complaint: string | null;
+  diagnosis: string | null;
+}
+
+/** Explicit base column projection — the joined display fields are added per query. */
+const repairOrderColumns = {
+  id: repairOrder.id,
+  vehicleId: repairOrder.vehicleId,
+  mechanicId: repairOrder.mechanicId,
+  complaint: repairOrder.complaint,
+  diagnosis: repairOrder.diagnosis,
+  invoiceStatus: repairOrder.invoiceStatus,
+  paymentStatus: repairOrder.paymentStatus,
+  createdAt: repairOrder.createdAt,
+  updatedAt: repairOrder.updatedAt,
 } as const;
 
 /**
@@ -519,5 +573,150 @@ export class ScopedDb {
       throw new NotFoundError("Mechanic not found");
     }
     return row;
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Repair Order predicate. */
+  #repairOrderScope() {
+    return and(
+      eq(repairOrder.accountId, this.scope.accountId),
+      eq(repairOrder.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * Assert a Vehicle is in the caller's scope, or raise `NotFoundError`. A
+   * `vehicleId` from another Account's Location is invisible here, so a Repair
+   * Order can never be opened against (or moved onto) a cross-tenant Vehicle —
+   * the FK alone would not stop that, since it is not scope-aware.
+   */
+  async #assertVehicleInScope(vehicleId: string): Promise<void> {
+    const rows = await this.#db
+      .select({ id: vehicle.id })
+      .from(vehicle)
+      .where(and(eq(vehicle.id, vehicleId), this.#vehicleScope()))
+      .limit(1);
+    if (!rows[0]) {
+      throw new NotFoundError("Vehicle not found");
+    }
+  }
+
+  /**
+   * Assert an optional lead Mechanic is in the caller's scope. `null` (no lead)
+   * is always fine; a `mechanicId` from another Account's Location raises
+   * `NotFoundError`, so the lead can never point across the tenant boundary.
+   */
+  async #assertMechanicInScope(mechanicId: string | null): Promise<void> {
+    if (mechanicId === null) {
+      return;
+    }
+    const rows = await this.#db
+      .select({ id: mechanic.id })
+      .from(mechanic)
+      .where(and(eq(mechanic.id, mechanicId), this.#mechanicScope()))
+      .limit(1);
+    if (!rows[0]) {
+      throw new NotFoundError("Mechanic not found");
+    }
+  }
+
+  /**
+   * The full Repair Order projection: base columns plus the joined Vehicle
+   * identity, owner name, and optional lead Mechanic name. The Vehicle/owner
+   * joins are inner (an RO always has both); the Mechanic join is left (the lead
+   * is optional, so `mechanicName` is null when unassigned). Constrained to the
+   * caller's scope by `where`.
+   */
+  #selectRepairOrders(where: ReturnType<typeof and>) {
+    return this.#db
+      .select({
+        ...repairOrderColumns,
+        vehiclePlate: vehicle.plate,
+        vehicleVin: vehicle.vin,
+        vehicleMake: vehicle.make,
+        vehicleModel: vehicle.model,
+        customerName: customer.name,
+        mechanicName: mechanic.name,
+      })
+      .from(repairOrder)
+      .innerJoin(vehicle, eq(vehicle.id, repairOrder.vehicleId))
+      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .leftJoin(mechanic, eq(mechanic.id, repairOrder.mechanicId))
+      .where(where);
+  }
+
+  /**
+   * Repair Orders in the current Location, newest first — the work list the front
+   * desk browses. An optional `vehicleId` narrows to one Vehicle's orders (its
+   * Service History surface, GF-08 lands here from the Vehicle detail page).
+   */
+  async listRepairOrders(filter: { vehicleId: string | null }): Promise<ScopedRepairOrder[]> {
+    const conditions = [this.#repairOrderScope()];
+    if (filter.vehicleId) {
+      conditions.push(eq(repairOrder.vehicleId, filter.vehicleId));
+    }
+    return this.#selectRepairOrders(and(...conditions)).orderBy(desc(repairOrder.createdAt));
+  }
+
+  /** A single Repair Order, or `NotFoundError` if it is not in the caller's scope. */
+  async getRepairOrder(id: string): Promise<ScopedRepairOrder> {
+    const rows = await this.#selectRepairOrders(
+      and(eq(repairOrder.id, id), this.#repairOrderScope()),
+    ).limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Repair order not found");
+    }
+    return row;
+  }
+
+  /**
+   * Open a Repair Order against an in-scope Vehicle, in the current Location. The
+   * Vehicle and the optional lead Mechanic are checked for scope membership first,
+   * so neither can point across the tenant boundary.
+   */
+  async createRepairOrder(values: RepairOrderWriteValues): Promise<ScopedRepairOrder> {
+    await this.#assertVehicleInScope(values.vehicleId);
+    await this.#assertMechanicInScope(values.mechanicId);
+
+    const rows = await this.#db
+      .insert(repairOrder)
+      .values({
+        accountId: this.scope.accountId,
+        locationId: this.scope.locationId,
+        ...values,
+      })
+      .returning({ id: repairOrder.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Repair order could not be created");
+    }
+    return this.getRepairOrder(row.id);
+  }
+
+  /**
+   * Update a Repair Order within the caller's scope. The reassigned Vehicle and
+   * optional lead Mechanic must also be in scope. The `WHERE` is constrained by
+   * `accountId` + `locationId`, so an order in another Account's Location is
+   * invisible and updating it raises `NotFoundError`, never a cross-tenant write.
+   * `invoiceStatus`/`paymentStatus` are intentionally never touched here — they
+   * are set by GF-14/GF-15 (ADR-0002).
+   */
+  async updateRepairOrder(id: string, values: RepairOrderWriteValues): Promise<ScopedRepairOrder> {
+    await this.#assertVehicleInScope(values.vehicleId);
+    await this.#assertMechanicInScope(values.mechanicId);
+
+    const rows = await this.#db
+      .update(repairOrder)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(eq(repairOrder.id, id), this.#repairOrderScope()))
+      .returning({ id: repairOrder.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Repair order not found");
+    }
+    return this.getRepairOrder(row.id);
   }
 }
