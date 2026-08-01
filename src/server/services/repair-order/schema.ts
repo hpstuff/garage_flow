@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { KANBAN_STAGES } from "../../db/schema";
 
 /**
  * Repair Order input schemas (ADR-0016). Validation is authoritative in the
@@ -6,11 +7,11 @@ import { z } from "zod";
  * fields (`accountId`, `locationId`) are never part of the input; they come from
  * the `Scope`, never the caller.
  *
- * `invoiceStatus` and `paymentStatus` are deliberately **not** here: they are
- * reference-only fields set by the invoicing/payment slices (GF-14/GF-15,
- * ADR-0002), never through this create/edit path. `vehicleId` and the optional
- * lead `mechanicId` *are* caller input, but their existence within the scope is
- * enforced by ScopedDb, not here.
+ * `invoiceStatus`, `paymentStatus` and `stage` are deliberately **not** in the
+ * create/edit fields: the first two are reference-only (GF-14/GF-15, ADR-0002),
+ * and `stage` moves only through its own guarded path (GF-10). `vehicleId` and the
+ * optional lead `mechanicId` *are* caller input, but their existence within the
+ * scope is enforced by ScopedDb, not here.
  */
 
 /**
@@ -64,3 +65,25 @@ export const getRepairOrderSchema = z.object({ id: z.uuid() }).strict();
 
 export const listRepairOrdersSchema = z.object({ vehicleId: z.uuid() }).strict().partial();
 export type ListRepairOrdersInput = z.infer<typeof listRepairOrdersSchema>;
+
+/**
+ * Move a Repair Order to another Kanban Stage (GF-10). `stage` must be one of the
+ * six fixed stages; the terminal rule (`delivered` cannot move on) is enforced by
+ * the service against current state, not expressible here.
+ */
+export const moveRepairOrderStageSchema = z
+  .object({ id: z.uuid(), stage: z.enum(KANBAN_STAGES) })
+  .strict();
+export type MoveRepairOrderStageInput = z.infer<typeof moveRepairOrderStageSchema>;
+
+/**
+ * Replace a Location's hidden Kanban Stages (GF-10). Every entry must be a valid
+ * stage; duplicates are collapsed so the stored set is clean. An empty array shows
+ * every stage. The stages themselves are fixed — this only ever hides a subset.
+ */
+export const setHiddenStagesSchema = z
+  .object({
+    stages: z.array(z.enum(KANBAN_STAGES)).transform((stages) => [...new Set(stages)]),
+  })
+  .strict();
+export type SetHiddenStagesInput = z.infer<typeof setHiddenStagesSchema>;

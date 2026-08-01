@@ -9,18 +9,20 @@
  */
 
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { NotFoundError } from "../domain/errors";
+import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
   type CustomerKind,
   customer,
   type InvoiceStatus,
+  type KanbanStage,
   type LineItemType,
   lineItem,
   location,
   mechanic,
   type PaymentStatus,
   repairOrder,
+  TERMINAL_KANBAN_STAGE,
   type VehicleKind,
   vehicle,
 } from "./schema";
@@ -173,6 +175,8 @@ export interface ScopedRepairOrder {
   mechanicName: string | null;
   complaint: string | null;
   diagnosis: string | null;
+  /** Kanban Stage (GF-10) — where the car is on the board; independent of the statuses. */
+  stage: KanbanStage;
   invoiceStatus: InvoiceStatus;
   paymentStatus: PaymentStatus;
   createdAt: Date;
@@ -180,10 +184,11 @@ export interface ScopedRepairOrder {
 }
 
 /**
- * The Repair Order fields a caller may set — scope-derived columns are never
- * here, and `invoiceStatus`/`paymentStatus` are deliberately excluded: they are
- * reference-only, owned by the invoicing/payment slices (ADR-0002), not this
- * create/edit path.
+ * The Repair Order fields a caller may set through the create/edit path — scope-
+ * derived columns are never here; `invoiceStatus`/`paymentStatus` are excluded as
+ * reference-only, owned by the invoicing/payment slices (ADR-0002); and `stage`
+ * is excluded because it moves only through {@link ScopedDb.moveRepairOrderStage}
+ * (GF-10), which enforces the terminal rule — never a free-form column write.
  */
 export interface RepairOrderWriteValues {
   vehicleId: string;
@@ -199,6 +204,7 @@ const repairOrderColumns = {
   mechanicId: repairOrder.mechanicId,
   complaint: repairOrder.complaint,
   diagnosis: repairOrder.diagnosis,
+  stage: repairOrder.stage,
   invoiceStatus: repairOrder.invoiceStatus,
   paymentStatus: repairOrder.paymentStatus,
   createdAt: repairOrder.createdAt,
@@ -308,6 +314,54 @@ export class ScopedDb {
       throw new NotFoundError("Location not found for the current scope");
     }
     return row;
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Location predicate. */
+  #locationScope() {
+    return and(
+      eq(location.id, this.scope.locationId),
+      eq(location.accountId, this.scope.accountId),
+    );
+  }
+
+  /**
+   * The Kanban Stages the current Location hides on its board (GF-10). A Location
+   * can only *hide* stages it doesn't use — the set is fixed and cannot be added
+   * to or reordered — so this is a subset of {@link KANBAN_STAGES}, empty when
+   * every stage is shown.
+   */
+  async getHiddenStages(): Promise<KanbanStage[]> {
+    const rows = await this.#db
+      .select({ hiddenStages: location.hiddenStages })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.hiddenStages;
+  }
+
+  /**
+   * Replace the current Location's hidden Stages (GF-10). Callers pass the exact
+   * set to hide; there is no add/reorder path, so a plain overwrite is correct.
+   * Scoped by `accountId` + `locationId`, so one Account can never touch another's
+   * board configuration.
+   */
+  async setHiddenStages(stages: KanbanStage[]): Promise<KanbanStage[]> {
+    const rows = await this.#db
+      .update(location)
+      .set({ hiddenStages: stages, updatedAt: new Date() })
+      .where(this.#locationScope())
+      .returning({ hiddenStages: location.hiddenStages });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.hiddenStages;
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
@@ -776,6 +830,30 @@ export class ScopedDb {
       throw new NotFoundError("Repair order not found");
     }
     return this.getRepairOrder(row.id);
+  }
+
+  /**
+   * Move a Repair Order to another Kanban Stage (GF-10). The stages are a fixed,
+   * ordered set (CONTEXT.md); moving is a plain stage assignment — any target is
+   * reachable, since the board is a workflow, not a strict pipeline. The one rule
+   * is that **`delivered` is terminal**: an order already delivered cannot move
+   * on, so that raises `ConflictError`. The order is loaded scoped first, so one
+   * in another Account's Location is invisible and raises `NotFoundError` — never
+   * a cross-tenant write. Stage is independent of the invoice/payment references,
+   * which this never touches (ADR-0002).
+   */
+  async moveRepairOrderStage(id: string, stage: KanbanStage): Promise<ScopedRepairOrder> {
+    const current = await this.getRepairOrder(id);
+    if (current.stage === TERMINAL_KANBAN_STAGE) {
+      throw new ConflictError("A delivered repair order is terminal and cannot be moved");
+    }
+
+    await this.#db
+      .update(repairOrder)
+      .set({ stage, updatedAt: new Date() })
+      .where(and(eq(repairOrder.id, id), this.#repairOrderScope()));
+
+    return this.getRepairOrder(id);
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable Line Item predicate. */
