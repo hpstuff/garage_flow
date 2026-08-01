@@ -8,7 +8,8 @@
     "customers": "Клиенти",
     "vehicles": "Автомобили",
     "repairOrders": "Поръчки за ремонт",
-    "mechanics": "Механици"
+    "mechanics": "Механици",
+    "board": "Канбан"
   },
   "search": {
     "label": "Бързо търсене на автомобил",
@@ -164,7 +165,8 @@
       "mechanic": "Механик",
       "invoice": "Фактура",
       "payment": "Плащане",
-      "createdAt": "Открита"
+      "createdAt": "Открита",
+      "stage": "Етап"
     },
     "invoiceStatus": {
       "not_invoiced": "Без фактура",
@@ -186,7 +188,8 @@
       "complaint": "Оплакване",
       "diagnosis": "Диагноза",
       "createdAt": "Открита",
-      "empty": "—"
+      "empty": "—",
+      "stage": "Етап"
     },
     "form": {
       "createTitle": "Нова поръчка за ремонт",
@@ -257,6 +260,28 @@
       "cancel": "Отказ",
       "error": "Редът не може да бъде запазен.",
       "notFound": "Редът не е намерен."
+    },
+    "stage": {
+      "waiting": "Чакащи",
+      "diagnosing": "Диагностика",
+      "waiting_for_parts": "Чакащи части",
+      "repairing": "В ремонт",
+      "ready": "Готови",
+      "delivered": "Предадени"
+    },
+    "board": {
+      "title": "Канбан",
+      "subtitle": "Поръчките по етапи на работния процес.",
+      "open": "Канбан",
+      "list": "Списък",
+      "empty": "Все още няма поръчки за ремонт.",
+      "emptyColumn": "Няма поръчки",
+      "count": "{count}",
+      "move": "Премести",
+      "moveError": "Етапът не може да бъде променен.",
+      "terminal": "Краен етап",
+      "visibility": "Етапи",
+      "visibilityHint": "Скрийте етапите, които не използвате."
     }
   },
   "mechanics": {

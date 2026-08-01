@@ -6,9 +6,14 @@ import { requireScope } from "@/app/lib/session";
 import { type FieldErrors, isDomainError, ValidationError } from "@/server/domain/errors";
 import {
   createRepairOrder,
+  getKanbanBoard,
   getRepairOrder,
+  type KanbanBoard,
+  type KanbanStage,
   listRepairOrders,
+  moveRepairOrderStage,
   type ScopedRepairOrder,
+  setHiddenStages,
   updateRepairOrder,
 } from "@/server/services/repair-order/service";
 
@@ -85,5 +90,57 @@ export async function updateRepairOrderAction(input: unknown): Promise<RepairOrd
     return { ok: true, data };
   } catch (error) {
     return toMutationError(error);
+  }
+}
+
+/**
+ * Move a Repair Order between Kanban Stages (GF-10). A `CONFLICT` result means the
+ * order is `delivered` (terminal) and cannot move on; the board surfaces that as a
+ * plain error. Revalidates the board and the order's other surfaces.
+ */
+export async function moveRepairOrderStageAction(
+  id: string,
+  stage: KanbanStage,
+): Promise<RepairOrderMutationResult> {
+  try {
+    const scope = await requireScope();
+    const data = await moveRepairOrderStage(scope, { id, stage });
+    revalidatePath("/repair-orders/board");
+    revalidatePath("/repair-orders");
+    revalidatePath(`/repair-orders/${data.id}`);
+    revalidatePath(`/vehicles/${data.vehicleId}`);
+    return { ok: true, data };
+  } catch (error) {
+    return toMutationError(error);
+  }
+}
+
+/** Load the Kanban board for the current Location (GF-10). */
+export async function getKanbanBoardAction(): Promise<ActionResult<KanbanBoard>> {
+  try {
+    const scope = await requireScope();
+    return { ok: true, data: await getKanbanBoard(scope) };
+  } catch (error) {
+    if (isDomainError(error)) {
+      return { ok: false, error: error.code };
+    }
+    throw error;
+  }
+}
+
+/** Replace the Location's hidden Kanban Stages (GF-10) and refresh the board. */
+export async function setHiddenStagesAction(
+  stages: KanbanStage[],
+): Promise<ActionResult<KanbanStage[]>> {
+  try {
+    const scope = await requireScope();
+    const data = await setHiddenStages(scope, { stages });
+    revalidatePath("/repair-orders/board");
+    return { ok: true, data };
+  } catch (error) {
+    if (isDomainError(error)) {
+      return { ok: false, error: error.code };
+    }
+    throw error;
   }
 }

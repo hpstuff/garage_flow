@@ -11,6 +11,7 @@ import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
 import { listLineItemsAction } from "../_actions/line-item-actions";
 import { getRepairOrderAction } from "../_actions/repair-order-actions";
 import { LineItemsEditor } from "../_components/line-items-editor";
+import { stageBadgeVariant } from "../_components/stages";
 import { invoiceStatusVariant, paymentStatusVariant } from "../_components/status";
 
 /**
@@ -63,6 +64,9 @@ export default async function RepairOrderDetailPage({
           </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{vehicleTitle}</h1>
+            <Badge variant={stageBadgeVariant[order.stage]}>
+              {tStatus(`stage.${order.stage}`)}
+            </Badge>
             <Badge variant={invoiceStatusVariant[order.invoiceStatus]}>
               {tStatus(`invoiceStatus.${order.invoiceStatus}`)}
             </Badge>

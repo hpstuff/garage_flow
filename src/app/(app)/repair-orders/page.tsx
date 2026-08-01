@@ -15,6 +15,7 @@ import {
 import { formatDate } from "@/lib/format";
 import type { ScopedRepairOrder } from "@/server/services/repair-order/service";
 import { listRepairOrdersAction } from "./_actions/repair-order-actions";
+import { stageBadgeVariant } from "./_components/stages";
 import { invoiceStatusVariant, paymentStatusVariant } from "./_components/status";
 
 /**
@@ -25,6 +26,7 @@ import { invoiceStatusVariant, paymentStatusVariant } from "./_components/status
  */
 export default async function RepairOrdersPage() {
   const t = await getTranslations("repairOrders");
+  const tStage = await getTranslations("repairOrders.stage");
 
   const result = await listRepairOrdersAction();
   if (!result.ok) {
@@ -43,9 +45,14 @@ export default async function RepairOrdersPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <Link href="/repair-orders/new" className={buttonVariants()}>
-          {t("new")}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/repair-orders/board" className={buttonVariants({ variant: "outline" })}>
+            {t("board.open")}
+          </Link>
+          <Link href="/repair-orders/new" className={buttonVariants()}>
+            {t("new")}
+          </Link>
+        </div>
       </div>
 
       {orders.length === 0 ? (
@@ -63,6 +70,7 @@ export default async function RepairOrdersPage() {
                 <TableHead>{t("columns.vehicle")}</TableHead>
                 <TableHead>{t("columns.owner")}</TableHead>
                 <TableHead>{t("columns.mechanic")}</TableHead>
+                <TableHead>{t("columns.stage")}</TableHead>
                 <TableHead>{t("columns.invoice")}</TableHead>
                 <TableHead>{t("columns.payment")}</TableHead>
                 <TableHead>{t("columns.createdAt")}</TableHead>
@@ -79,6 +87,9 @@ export default async function RepairOrdersPage() {
                   <TableCell className="text-muted-foreground">{order.customerName}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {order.mechanicName ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={stageBadgeVariant[order.stage]}>{tStage(order.stage)}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={invoiceStatusVariant[order.invoiceStatus]}>

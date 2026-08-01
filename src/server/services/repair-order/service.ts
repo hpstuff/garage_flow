@@ -28,13 +28,13 @@ import {
   updateRepairOrderSchema,
 } from "./schema";
 
-export type { ScopedRepairOrder } from "../../db/scoped-db";
 export {
   INITIAL_KANBAN_STAGE,
   KANBAN_STAGES,
   type KanbanStage,
   TERMINAL_KANBAN_STAGE,
 } from "../../db/schema";
+export type { ScopedRepairOrder } from "../../db/scoped-db";
 
 /** One column of the Kanban board (GF-10): a stage, whether it is hidden, its orders. */
 export interface KanbanColumn {

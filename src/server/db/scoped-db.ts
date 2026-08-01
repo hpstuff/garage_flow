@@ -318,7 +318,10 @@ export class ScopedDb {
 
   /** The scope's `{ accountId, locationId }` as a reusable Location predicate. */
   #locationScope() {
-    return and(eq(location.id, this.scope.locationId), eq(location.accountId, this.scope.accountId));
+    return and(
+      eq(location.id, this.scope.locationId),
+      eq(location.accountId, this.scope.accountId),
+    );
   }
 
   /**

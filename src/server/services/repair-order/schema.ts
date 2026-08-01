@@ -83,9 +83,7 @@ export type MoveRepairOrderStageInput = z.infer<typeof moveRepairOrderStageSchem
  */
 export const setHiddenStagesSchema = z
   .object({
-    stages: z
-      .array(z.enum(KANBAN_STAGES))
-      .transform((stages) => [...new Set(stages)]),
+    stages: z.array(z.enum(KANBAN_STAGES)).transform((stages) => [...new Set(stages)]),
   })
   .strict();
 export type SetHiddenStagesInput = z.infer<typeof setHiddenStagesSchema>;
