@@ -17,7 +17,13 @@ import { location, organization } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { NotFoundError, ValidationError } from "../../domain/errors";
 import { createCustomer } from "../customer/service";
-import { createVehicle, getVehicle, listVehicles, updateVehicle } from "./service";
+import {
+  createVehicle,
+  getVehicle,
+  listVehicles,
+  searchVehicles,
+  updateVehicle,
+} from "./service";
 
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
@@ -60,6 +66,16 @@ describe("vehicle service — validation (no DB)", () => {
     await expect(
       updateVehicle(s, { id: "nope", kind: "car", customerId: owner, plate: "CA1234AB" }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects an empty search query (GF-06)", async () => {
+    await expect(searchVehicles(s, { query: "   " })).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects an out-of-range search limit (GF-06)", async () => {
+    await expect(searchVehicles(s, { query: "CA", limit: 99 })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 });
 
@@ -225,5 +241,57 @@ describe.skipIf(!hasDb)("vehicle service — integration (real Postgres, ADR-001
     // A forged scope — Account A's identity but Account B's locationId — is also rejected.
     const forged = scope(accountA, locationB);
     await expect(getVehicle(forged, { id: mine.id })).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  // GF-06 — the fast plate/VIN search wedge (ADR-0008). These run last so their
+  // extra Vehicles don't perturb the count-sensitive list tests above.
+
+  it("resolves a plate typed loosely — spacing and case ignored (GF-06)", async () => {
+    // Stored as "CA1234AB"; the front desk types it with spaces and lowercase.
+    const spaced = await searchVehicles(scope(accountA, locationA), { query: "ca 1234 ab" });
+    expect(spaced.map((v) => v.plate)).toContain("CA1234AB");
+
+    const hyphenated = await searchVehicles(scope(accountA, locationA), { query: "CA-1234-AB" });
+    expect(hyphenated.map((v) => v.plate)).toContain("CA1234AB");
+  });
+
+  it("resolves a VIN typed loosely, and returns the current owner (GF-06)", async () => {
+    const found = await searchVehicles(scope(accountA, locationA), {
+      query: "1hd1 kb41 97y 000002",
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.vin).toBe("1HD1KB4197Y000002");
+    expect(found[0]?.customerName).toBe("Иван");
+  });
+
+  it("ranks an exact plate match ahead of partial ones (GF-06)", async () => {
+    await createVehicle(scope(accountA, locationA), {
+      kind: "car",
+      customerId: ownerA,
+      plate: "CA1234ABX",
+    });
+    const results = await searchVehicles(scope(accountA, locationA), { query: "ca1234ab" });
+    // Both "CA1234AB" (exact) and "CA1234ABX" (partial) match; exact comes first.
+    expect(results[0]?.plate).toBe("CA1234AB");
+  });
+
+  it("honours the result limit (GF-06)", async () => {
+    const results = await searchVehicles(scope(accountA, locationA), { query: "ca", limit: 1 });
+    expect(results).toHaveLength(1);
+  });
+
+  it("never leaks a Vehicle across the tenant boundary in search (GF-06)", async () => {
+    await createVehicle(scope(accountB, locationB), {
+      kind: "car",
+      customerId: ownerB,
+      plate: "CA1234AB",
+    });
+    // Account A searching its own plate must never see Account B's identical plate.
+    const results = await searchVehicles(scope(accountA, locationA), { query: "ca1234ab" });
+    expect(results.every((v) => v.customerName !== "Петър")).toBe(true);
+  });
+
+  it("returns nothing for a query with no searchable characters (GF-06)", async () => {
+    expect(await searchVehicles(scope(accountA, locationA), { query: "---" })).toEqual([]);
   });
 });

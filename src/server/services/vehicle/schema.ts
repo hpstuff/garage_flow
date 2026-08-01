@@ -83,3 +83,16 @@ export const listVehiclesSchema = z
   .strict()
   .partial();
 export type ListVehiclesInput = z.infer<typeof listVehiclesSchema>;
+
+/**
+ * Fast plate/VIN search (GF-06). A non-empty query is required — an empty search
+ * has no meaning here (the caller short-circuits blanks). `limit` bounds the
+ * quick-pick result set; it defaults to a small, snappy page.
+ */
+export const searchVehiclesSchema = z
+  .object({
+    query: z.string().trim().min(1, "Въведете какво търсите.").max(200),
+    limit: z.coerce.number().int().min(1).max(20).default(8),
+  })
+  .strict();
+export type SearchVehiclesInput = z.infer<typeof searchVehiclesSchema>;

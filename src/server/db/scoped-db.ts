@@ -8,7 +8,7 @@
  * private to this class.
  */
 
-import { and, asc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import { type CustomerKind, customer, location, type VehicleKind, vehicle } from "./schema";
@@ -107,6 +107,20 @@ const vehicleColumns = {
   createdAt: vehicle.createdAt,
   updatedAt: vehicle.updatedAt,
 } as const;
+
+/**
+ * A plate/VIN reduced to its bare identity: upper-cased with every space and
+ * punctuation stripped. Comparing on this form is what lets "ca 1234-ab",
+ * "CA1234AB" and "ca1234ab" all resolve to the same Vehicle — the loose,
+ * front-desk-speed match at the heart of the search wedge (ADR-0008).
+ */
+const normalizedPlate = sql`regexp_replace(upper(coalesce(${vehicle.plate}, '')), '[^A-Z0-9]', '', 'g')`;
+const normalizedVin = sql`regexp_replace(upper(coalesce(${vehicle.vin}, '')), '[^A-Z0-9]', '', 'g')`;
+
+/** Reduce a raw search term to the same bare form the identifiers are matched on. */
+function looseIdentifier(term: string): string {
+  return term.replace(/[^a-z0-9]/gi, "").toUpperCase();
+}
 
 export class ScopedDb {
   readonly scope: Scope;
@@ -252,10 +266,35 @@ export class ScopedDb {
   }
 
   /**
+   * The OR-predicate that makes a Vehicle match a free-text `term`: plate and VIN
+   * matched *loosely* — case-, space- and punctuation-insensitive, so a plate
+   * typed as "ca 1234 ab" still finds "CA1234AB" (the fast-search wedge,
+   * ADR-0008) — plus make, model and owner name matched case-insensitively.
+   * Returns `null` for a term with no searchable characters.
+   */
+  #vehicleMatch(term: string) {
+    const trimmed = term.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const conditions = [
+      ilike(vehicle.make, `%${trimmed}%`),
+      ilike(vehicle.model, `%${trimmed}%`),
+      ilike(customer.name, `%${trimmed}%`),
+    ];
+    const loose = looseIdentifier(trimmed);
+    if (loose) {
+      const pattern = `%${loose}%`;
+      conditions.unshift(sql`${normalizedPlate} like ${pattern}`, sql`${normalizedVin} like ${pattern}`);
+    }
+    return or(...conditions);
+  }
+
+  /**
    * Vehicles in the current Location with their current owner's name. An optional
    * `customerId` narrows to one owner's Vehicles; an optional `search` matches
-   * (case-insensitively) plate, VIN, make, model, or owner name — the plate/VIN
-   * search wedge (ADR-0008).
+   * plate, VIN, make, model, or owner name (see {@link ScopedDb.searchVehicles}
+   * for the plate/VIN loose-matching, ADR-0008).
    */
   async listVehicles(filter: {
     search: string | null;
@@ -265,17 +304,9 @@ export class ScopedDb {
     if (filter.customerId) {
       conditions.push(eq(vehicle.customerId, filter.customerId));
     }
-    const term = filter.search?.trim();
-    if (term) {
-      conditions.push(
-        or(
-          ilike(vehicle.plate, `%${term}%`),
-          ilike(vehicle.vin, `%${term}%`),
-          ilike(vehicle.make, `%${term}%`),
-          ilike(vehicle.model, `%${term}%`),
-          ilike(customer.name, `%${term}%`),
-        ),
-      );
+    const match = filter.search ? this.#vehicleMatch(filter.search) : null;
+    if (match) {
+      conditions.push(match);
     }
 
     return this.#db
@@ -284,6 +315,36 @@ export class ScopedDb {
       .innerJoin(customer, eq(customer.id, vehicle.customerId))
       .where(and(...conditions))
       .orderBy(asc(vehicle.plate));
+  }
+
+  /**
+   * Fast plate/VIN search (GF-06) — the primary way the front desk reaches a
+   * Vehicle. Resolves a loosely-typed plate or VIN (spacing/case ignored) to its
+   * Vehicles with the current owner, best matches first: an exact plate/VIN hit
+   * ranks above a partial one. Also matches make, model and owner name so a
+   * half-remembered car is still findable. Capped at `limit` for a snappy picker.
+   *
+   * At single-Location scale a scan is instant, so this deliberately favours the
+   * loose, index-free predicate over raw speed; add a functional index here if a
+   * Location ever grows large enough to need one.
+   */
+  async searchVehicles(query: string, limit: number): Promise<ScopedVehicle[]> {
+    const match = this.#vehicleMatch(query);
+    if (!match) {
+      return [];
+    }
+
+    const loose = looseIdentifier(query.trim());
+    const rank = sql`case when ${normalizedPlate} = ${loose} or ${normalizedVin} = ${loose} then 0 else 1 end`;
+    const orderBy = loose ? [rank, asc(vehicle.plate)] : [asc(vehicle.plate)];
+
+    return this.#db
+      .select({ ...vehicleColumns, customerName: customer.name })
+      .from(vehicle)
+      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .where(and(this.#vehicleScope(), match))
+      .orderBy(...orderBy)
+      .limit(limit);
   }
 
   /** A single Vehicle, or `NotFoundError` if it is not in the caller's scope. */

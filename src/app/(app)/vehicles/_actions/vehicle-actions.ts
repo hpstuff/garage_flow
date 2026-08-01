@@ -9,6 +9,7 @@ import {
   getVehicle,
   listVehicles,
   type ScopedVehicle,
+  searchVehicles,
   updateVehicle,
 } from "@/server/services/vehicle/service";
 
@@ -40,6 +41,26 @@ export async function listVehiclesAction(search?: string): Promise<ActionResult<
   try {
     const scope = await requireScope();
     return { ok: true, data: await listVehicles(scope, { search }) };
+  } catch (error) {
+    if (isDomainError(error)) {
+      return { ok: false, error: error.code };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fast plate/VIN search (GF-06). Blank queries short-circuit to an empty result
+ * so the search-as-you-type UI needn't special-case them; a real query goes
+ * through the service, which does the loose plate/VIN matching (ADR-0008).
+ */
+export async function searchVehiclesAction(query: string): Promise<ActionResult<ScopedVehicle[]>> {
+  try {
+    const scope = await requireScope();
+    if (!query || query.trim().length === 0) {
+      return { ok: true, data: [] };
+    }
+    return { ok: true, data: await searchVehicles(scope, { query }) };
   } catch (error) {
     if (isDomainError(error)) {
       return { ok: false, error: error.code };

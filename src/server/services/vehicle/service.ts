@@ -18,6 +18,7 @@ import {
   createVehicleSchema,
   getVehicleSchema,
   listVehiclesSchema,
+  searchVehiclesSchema,
   updateVehicleSchema,
 } from "./schema";
 
@@ -33,6 +34,20 @@ export async function listVehicles(scope: Scope, input: unknown): Promise<Scoped
     search: parsed.data.search ?? null,
     customerId: parsed.data.customerId ?? null,
   });
+}
+
+/**
+ * Fast plate/VIN search (GF-06) — resolve a loosely-typed plate or VIN to its
+ * Vehicles (and current owner) within the Location scope. The primary, fastest
+ * path the front desk uses to reach a Vehicle (ADR-0008).
+ */
+export async function searchVehicles(scope: Scope, input: unknown): Promise<ScopedVehicle[]> {
+  const parsed = searchVehiclesSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError("Invalid vehicle search", z.flattenError(parsed.error).fieldErrors);
+  }
+
+  return scoped(scope).searchVehicles(parsed.data.query, parsed.data.limit);
 }
 
 export async function getVehicle(scope: Scope, input: unknown): Promise<ScopedVehicle> {
