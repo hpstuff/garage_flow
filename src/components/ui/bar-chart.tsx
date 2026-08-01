@@ -1,14 +1,14 @@
-import { cn } from "@/lib/utils";
 import {
-  BarChart as RechartsBarChart,
   Bar,
+  CartesianGrid,
+  Legend,
+  BarChart as RechartsBarChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 interface BarChartProps {
   data: Record<string, unknown>[];
@@ -115,7 +115,14 @@ export function BarChart({
             />
           )}
           {bars.map((bar, index) => {
-            const colorKey = bar.color || (`chart-${(index % 5) + 1}` as const);
+            const colorKey: "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5" =
+              bar.color ||
+              (`chart-${(index % 5) + 1}` as
+                | "chart-1"
+                | "chart-2"
+                | "chart-3"
+                | "chart-4"
+                | "chart-5");
             return (
               <Bar
                 key={bar.dataKey}

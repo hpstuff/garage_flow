@@ -1,12 +1,5 @@
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 
 interface DonutChartProps {
   data: {
@@ -64,8 +57,13 @@ export function DonutChart({
             }}
           >
             {data.map((entry, index) => {
-              const colorKey = colors[index % colors.length];
-              return <Cell key={`cell-${index}`} fill={chartColors[colorKey]} />;
+              const colorKey = colors[index % colors.length] as
+                | "chart-1"
+                | "chart-2"
+                | "chart-3"
+                | "chart-4"
+                | "chart-5";
+              return <Cell key={entry.name} fill={chartColors[colorKey]} />;
             })}
           </Pie>
           <Tooltip

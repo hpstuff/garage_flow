@@ -1,15 +1,14 @@
-import { cn } from "@/lib/utils";
 import {
-  LineChart as RechartsLineChart,
+  CartesianGrid,
+  Legend,
   Line,
+  LineChart as RechartsLineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  type LineProps,
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 interface LineChartProps {
   data: Record<string, unknown>[];
@@ -48,11 +47,7 @@ export function LineChart({
       <ResponsiveContainer width="100%" height={height}>
         <RechartsLineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           {showGrid && (
-            <CartesianGrid
-              strokeDasharray="3 3"
-              className="stroke-border"
-              vertical={false}
-            />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
           )}
           <XAxis
             dataKey={xAxisKey}
@@ -88,7 +83,14 @@ export function LineChart({
             />
           )}
           {lines.map((line, index) => {
-            const colorKey = line.color || (`chart-${(index % 5) + 1}` as const);
+            const colorKey: "chart-1" | "chart-2" | "chart-3" | "chart-4" | "chart-5" =
+              line.color ||
+              (`chart-${(index % 5) + 1}` as
+                | "chart-1"
+                | "chart-2"
+                | "chart-3"
+                | "chart-4"
+                | "chart-5");
             return (
               <Line
                 key={line.dataKey}
