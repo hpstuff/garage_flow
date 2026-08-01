@@ -9,7 +9,7 @@
  */
 
 import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { organization } from "./auth-schema";
+import { organization, user } from "./auth-schema";
 
 export const location = pgTable("location", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -117,6 +117,40 @@ export const vehicle = pgTable("vehicle", {
 });
 
 export type VehicleRow = typeof vehicle.$inferSelect;
+
+/**
+ * A **Mechanic** is an assignable worker a Repair Order or Line Item is given to
+ * (CONTEXT.md, GF-07). In the MVP it is often just a `name` with no login —
+ * deliberately distinct from a **User**: the per-plan "mechanic" limit counts
+ * Mechanics, not Users, and a Mechanic need not be able to sign in.
+ *
+ * `userId` is the optional, Phase-2 link to a login User (granted when a Mechanic
+ * gets mobile-app access). It stays `null` in the MVP and is not surfaced in the
+ * UI yet; `on delete set null` means removing that User only unlinks the login,
+ * it never deletes the Mechanic or its labor attribution. Scoped to a
+ * **Location** like every operational row (ADR-0003), reached only through
+ * ScopedDb (ADR-0013). There is no hard-delete path, matching Customer/Vehicle —
+ * a Mechanic referenced by past Line Items must survive for labor history.
+ */
+export const mechanic = pgTable("mechanic", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** Optional Phase-2 link to a login User (mobile-app access). Null in the MVP. */
+  userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+  /** The Mechanic's name — what pickers and lists show. */
+  name: text("name").notNull(),
+  /** Internal free-text note (specialty, phone, …), never shown to the Customer. */
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type MechanicRow = typeof mechanic.$inferSelect;
 
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
