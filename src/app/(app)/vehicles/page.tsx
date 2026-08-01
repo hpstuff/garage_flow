@@ -94,7 +94,9 @@ export default async function VehiclesPage({
                 return (
                   <TableRow key={vehicle.id}>
                     <TableCell className="font-medium">
-                      {vehicle.plate ?? vehicle.vin ?? "—"}
+                      <Link href={`/vehicles/${vehicle.id}`} className="hover:underline">
+                        {vehicle.plate ?? vehicle.vin ?? "—"}
+                      </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{description || "—"}</TableCell>
                     <TableCell>

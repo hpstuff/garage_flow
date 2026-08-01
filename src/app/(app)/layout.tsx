@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { getScope } from "@/app/lib/session";
 import { LogoutButton } from "./_components/logout-button";
+import { VehicleSearch } from "./_components/vehicle-search";
 
 /**
  * Authenticated app shell (ADR-0017): the layout guards access (no scope →
@@ -21,8 +22,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center justify-between border-b px-4">
-        <span className="font-semibold">{tApp("name")}</span>
+      <header className="flex h-14 items-center gap-4 border-b px-4">
+        <span className="shrink-0 font-semibold">{tApp("name")}</span>
+        <div className="flex flex-1 justify-center">
+          <VehicleSearch />
+        </div>
         <LogoutButton />
       </header>
       <div className="flex flex-1">
