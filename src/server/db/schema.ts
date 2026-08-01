@@ -11,6 +11,31 @@
 import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { organization, user } from "./auth-schema";
 
+/**
+ * **Kanban Stage** (GF-10) — where a Vehicle physically is in the workflow
+ * (CONTEXT.md). A **fixed, ordered** set of six: a Location may *hide* stages it
+ * doesn't use but can never add or reorder them, so this tuple — declared once,
+ * in order — is the single source of truth for the whole board. Stage is
+ * deliberately independent of `invoice_status`/`payment_status` (ADR-0002): a car
+ * can be `delivered` while still `unpaid`, or `repairing` while already invoiced.
+ */
+export const KANBAN_STAGES = [
+  "waiting",
+  "diagnosing",
+  "waiting_for_parts",
+  "repairing",
+  "ready",
+  "delivered",
+] as const;
+export type KanbanStage = (typeof KANBAN_STAGES)[number];
+export const kanbanStage = pgEnum("kanban_stage", KANBAN_STAGES);
+
+/** The opening stage every Repair Order starts in when the car arrives. */
+export const INITIAL_KANBAN_STAGE: KanbanStage = "waiting";
+
+/** `delivered` is **terminal** (CONTEXT.md): an order there does not move on. */
+export const TERMINAL_KANBAN_STAGE: KanbanStage = "delivered";
+
 export const location = pgTable("location", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: text("account_id")
@@ -19,6 +44,13 @@ export const location = pgTable("location", {
   name: text("name").notNull(),
   /** VAT configuration (rates, registration number). Filled in by GF-12. */
   vatConfig: text("vat_config"),
+  /**
+   * Kanban Stages this Location hides on its board (GF-10). The set of stages is
+   * fixed (see {@link KANBAN_STAGES}) — a Location can only *hide* the ones it
+   * doesn't use, never add or reorder — so this is a subset of that tuple, empty
+   * by default (every stage shown).
+   */
+  hiddenStages: kanbanStage("hidden_stages").array().notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -183,6 +215,11 @@ export const paymentStatus = pgEnum("payment_status", PAYMENT_STATUSES);
  * Labor Line Items later, not here. `on delete set null` keeps the order (and its
  * history) when a Mechanic is unlinked.
  *
+ * `stage` is the **Kanban Stage** (GF-10) — where the car is in the workflow. It
+ * opens in {@link INITIAL_KANBAN_STAGE} and advances across the fixed six
+ * (CONTEXT.md); it is independent of the invoice/payment references below
+ * (ADR-0002), so progress on the board never implies anything about billing.
+ *
  * `invoiceStatus` and `paymentStatus` live here as **references only** (ADR-0002):
  * the Invoice is a separate immutable legal document, and these flags are set by
  * the invoicing/payment slices (GF-14/GF-15) — never by this create/edit path,
@@ -208,6 +245,8 @@ export const repairOrder = pgTable("repair_order", {
   complaint: text("complaint"),
   /** The mechanic's finding after inspection (CONTEXT.md). Distinct from the Complaint. */
   diagnosis: text("diagnosis"),
+  /** Kanban Stage (GF-10) — opens at `waiting`, independent of invoice/payment (ADR-0002). */
+  stage: kanbanStage("stage").notNull().default(INITIAL_KANBAN_STAGE),
   /** Reference-only invoicing state (ADR-0002) — set by GF-14, not by editing an Invoice. */
   invoiceStatus: invoiceStatus("invoice_status").notNull().default("not_invoiced"),
   /** Reference-only payment state (ADR-0002) — set by GF-15 from Payments on the Invoice. */
