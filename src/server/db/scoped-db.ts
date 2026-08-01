@@ -285,7 +285,10 @@ export class ScopedDb {
     const loose = looseIdentifier(trimmed);
     if (loose) {
       const pattern = `%${loose}%`;
-      conditions.unshift(sql`${normalizedPlate} like ${pattern}`, sql`${normalizedVin} like ${pattern}`);
+      conditions.unshift(
+        sql`${normalizedPlate} like ${pattern}`,
+        sql`${normalizedVin} like ${pattern}`,
+      );
     }
     return or(...conditions);
   }

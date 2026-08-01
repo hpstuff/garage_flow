@@ -17,13 +17,7 @@ import { location, organization } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { NotFoundError, ValidationError } from "../../domain/errors";
 import { createCustomer } from "../customer/service";
-import {
-  createVehicle,
-  getVehicle,
-  listVehicles,
-  searchVehicles,
-  updateVehicle,
-} from "./service";
+import { createVehicle, getVehicle, listVehicles, searchVehicles, updateVehicle } from "./service";
 
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
