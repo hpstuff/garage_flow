@@ -14,12 +14,12 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { db } from "../../db/client";
-import { customer, lineItem, location, mechanic, organization, vehicle } from "../../db/schema";
-import type { ScopedLineItem, ScopedRepairOrder } from "../../db/scoped-db";
+import { customer, location, mechanic, organization, vehicle } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
+import type { ScopedLineItem, ScopedRepairOrder } from "../../db/scoped-db";
 import { NotFoundError, ValidationError } from "../../domain/errors";
-import { createRepairOrder } from "../repair-order/service";
 import { createLineItem } from "../line-item/service";
+import { createRepairOrder } from "../repair-order/service";
 import { getWorkCard, projectWorkCard } from "./service";
 
 const scope = (accountId: string, locationId: string) =>
@@ -84,9 +84,24 @@ describe("projectWorkCard — pure projection (ADR-0009)", () => {
 
   it("groups Labor by Mechanic and sums each one's hours (by whom, for how long)", () => {
     const card = projectWorkCard(fakeOrder(), [
-      fakeLine({ mechanicId: "m1", mechanicName: "Иван", description: "Смяна накладки", quantity: 1500 }),
-      fakeLine({ mechanicId: "m2", mechanicName: "Петър", description: "Обезвъздушаване", quantity: 500 }),
-      fakeLine({ mechanicId: "m1", mechanicName: "Иван", description: "Смяна дискове", quantity: 2000 }),
+      fakeLine({
+        mechanicId: "m1",
+        mechanicName: "Иван",
+        description: "Смяна накладки",
+        quantity: 1500,
+      }),
+      fakeLine({
+        mechanicId: "m2",
+        mechanicName: "Петър",
+        description: "Обезвъздушаване",
+        quantity: 500,
+      }),
+      fakeLine({
+        mechanicId: "m1",
+        mechanicName: "Иван",
+        description: "Смяна дискове",
+        quantity: 2000,
+      }),
     ]);
 
     expect(card.laborByMechanic).toHaveLength(2);
@@ -113,7 +128,13 @@ describe("projectWorkCard — pure projection (ADR-0009)", () => {
   it("lists Parts (which part, how many) separately from Labor", () => {
     const card = projectWorkCard(fakeOrder(), [
       fakeLine({ type: "labor", mechanicId: "m1", mechanicName: "Иван" }),
-      fakeLine({ type: "part", mechanicId: null, mechanicName: null, description: "Накладки предни", quantity: 2000 }),
+      fakeLine({
+        type: "part",
+        mechanicId: null,
+        mechanicName: null,
+        description: "Накладки предни",
+        quantity: 2000,
+      }),
     ]);
 
     expect(card.laborByMechanic).toHaveLength(1);
