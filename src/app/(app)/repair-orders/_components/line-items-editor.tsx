@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatMoney, formatQuantity, formatVatRate } from "@/lib/format";
+import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "@/lib/vat";
 import type { RepairOrderTotals, ScopedLineItem } from "@/server/services/line-item/service";
 import { deleteLineItemAction } from "../_actions/line-item-actions";
 import { LineItemForm, type MechanicOption } from "./line-item-form";
@@ -24,14 +25,27 @@ type LineItemsEditorProps = {
   items: ScopedLineItem[];
   totals: RepairOrderTotals;
   mechanics: MechanicOption[];
+  /** The Location's VAT configuration (GF-12) — gates the VAT column and totals. */
+  vatConfig: VatConfig;
 };
 
 /** No row is being edited, or the sentinel for the blank "add" form. */
 type Editing = null | "new" | string;
 
-export function LineItemsEditor({ repairOrderId, items, totals, mechanics }: LineItemsEditorProps) {
+export function LineItemsEditor({
+  repairOrderId,
+  items,
+  totals,
+  mechanics,
+  vatConfig,
+}: LineItemsEditorProps) {
   const t = useTranslations("repairOrders.lineItems");
   const router = useRouter();
+
+  // A not-registered Location (ADR-0006) issues no-VAT invoices: hide the VAT
+  // column and rate input, and prefill new lines with its default rate otherwise.
+  const vatRegistered = vatConfig.mode === "registered";
+  const defaultVatRatePercent = vatRegistered ? vatConfig.rate / 100 : DEFAULT_VAT_RATE_PERCENT;
 
   const [editing, setEditing] = useState<Editing>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -85,7 +99,9 @@ export function LineItemsEditor({ repairOrderId, items, totals, mechanics }: Lin
                 <TableHead>{t("columns.mechanic")}</TableHead>
                 <TableHead className="text-right">{t("columns.quantity")}</TableHead>
                 <TableHead className="text-right">{t("columns.unitPrice")}</TableHead>
-                <TableHead className="text-right">{t("columns.vat")}</TableHead>
+                {vatRegistered ? (
+                  <TableHead className="text-right">{t("columns.vat")}</TableHead>
+                ) : null}
                 <TableHead className="text-right">{t("columns.amount")}</TableHead>
                 <TableHead className="text-right">{t("columns.actions")}</TableHead>
               </TableRow>
@@ -108,9 +124,11 @@ export function LineItemsEditor({ repairOrderId, items, totals, mechanics }: Lin
                   <TableCell className="text-right tabular-nums">
                     {formatMoney(item.unitPrice, item.currency)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatVatRate(item.vatRate)}
-                  </TableCell>
+                  {vatRegistered ? (
+                    <TableCell className="text-right tabular-nums">
+                      {formatVatRate(item.vatRate)}
+                    </TableCell>
+                  ) : null}
                   <TableCell className="text-right font-medium tabular-nums">
                     {formatMoney(item.amount, item.currency)}
                   </TableCell>
@@ -153,6 +171,8 @@ export function LineItemsEditor({ repairOrderId, items, totals, mechanics }: Lin
             repairOrderId={repairOrderId}
             mechanics={mechanics}
             lineItem={editTarget}
+            vatRegistered={vatRegistered}
+            defaultVatRatePercent={defaultVatRatePercent}
             onSaved={onSaved}
             onCancel={() => setEditing(null)}
           />
@@ -164,10 +184,18 @@ export function LineItemsEditor({ repairOrderId, items, totals, mechanics }: Lin
               <dt className="text-muted-foreground">{t("totals.net")}</dt>
               <dd className="tabular-nums">{formatMoney(totals.net, totals.currency)}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">{t("totals.vat")}</dt>
-              <dd className="tabular-nums">{formatMoney(totals.vat, totals.currency)}</dd>
-            </div>
+            {totals.vat === null ? (
+              // Not VAT-registered (ADR-0006): a true zero-VAT invoice — no VAT line.
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">{t("totals.vat")}</dt>
+                <dd className="text-muted-foreground">{t("totals.noVat")}</dd>
+              </div>
+            ) : (
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">{t("totals.vat")}</dt>
+                <dd className="tabular-nums">{formatMoney(totals.vat, totals.currency)}</dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
               <dt>{t("totals.gross")}</dt>
               <dd className="tabular-nums">{formatMoney(totals.gross, totals.currency)}</dd>
