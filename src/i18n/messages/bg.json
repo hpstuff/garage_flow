@@ -190,7 +190,34 @@
       "diagnosis": "Диагноза",
       "createdAt": "Открита",
       "empty": "—",
-      "stage": "Етап"
+      "stage": "Етап",
+      "workCard": "Работна карта"
+    },
+    "workCard": {
+      "title": "Работна карта",
+      "back": "Към поръчката",
+      "empty": "—",
+      "vehicle": "Автомобил",
+      "owner": "Собственик",
+      "createdAt": "Открита",
+      "complaint": "Оплакване",
+      "diagnosis": "Диагноза",
+      "labor": {
+        "title": "Извършен труд",
+        "empty": "Все още няма отчетен труд.",
+        "unassigned": "Без механик",
+        "totalHours": "Общо {hours} ч.",
+        "hours": "{hours} ч."
+      },
+      "parts": {
+        "title": "Вложени части",
+        "empty": "Все още няма вложени части.",
+        "quantity": "{quantity} бр."
+      },
+      "photos": {
+        "title": "Снимки",
+        "empty": "Няма прикачени снимки."
+      }
     },
     "form": {
       "createTitle": "Нова поръчка за ремонт",

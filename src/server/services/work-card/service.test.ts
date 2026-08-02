@@ -104,14 +104,15 @@ describe("projectWorkCard — pure projection (ADR-0009)", () => {
       }),
     ]);
 
-    expect(card.laborByMechanic).toHaveLength(2);
-    // First-appearance order: Иван, then Петър.
-    const [ivan, petar] = card.laborByMechanic;
-    expect(ivan.mechanicName).toBe("Иван");
-    expect(ivan.entries.map((e) => e.description)).toEqual(["Смяна накладки", "Смяна дискове"]);
-    expect(ivan.totalHours).toBe(3500);
-    expect(petar.mechanicName).toBe("Петър");
-    expect(petar.totalHours).toBe(500);
+    // First-appearance order: Иван (two lines), then Петър.
+    expect(card.laborByMechanic).toMatchObject([
+      {
+        mechanicName: "Иван",
+        totalHours: 3500,
+        entries: [{ description: "Смяна накладки" }, { description: "Смяна дискове" }],
+      },
+      { mechanicName: "Петър", totalHours: 500 },
+    ]);
   });
 
   it("collects Labor with a cleared Mechanic under a single null group", () => {
@@ -120,9 +121,8 @@ describe("projectWorkCard — pure projection (ADR-0009)", () => {
       fakeLine({ mechanicId: null, mechanicName: null, quantity: 250 }),
     ]);
 
+    expect(card.laborByMechanic).toMatchObject([{ mechanicId: null, totalHours: 1250 }]);
     expect(card.laborByMechanic).toHaveLength(1);
-    expect(card.laborByMechanic[0].mechanicId).toBeNull();
-    expect(card.laborByMechanic[0].totalHours).toBe(1250);
   });
 
   it("lists Parts (which part, how many) separately from Labor", () => {
@@ -138,9 +138,9 @@ describe("projectWorkCard — pure projection (ADR-0009)", () => {
     ]);
 
     expect(card.laborByMechanic).toHaveLength(1);
-    expect(card.parts).toHaveLength(1);
-    expect(card.parts[0].description).toBe("Накладки предни");
-    expect(card.parts[0].quantity).toBe(2000);
+    expect(card.parts).toEqual([
+      { lineItemId: expect.any(String), description: "Накладки предни", quantity: 2000 },
+    ]);
   });
 
   it("does NOT carry the Invoice's frozen legal subset — no money, no VAT, no statuses", () => {
@@ -278,10 +278,11 @@ describe.skipIf(!hasDb)("work card service — integration (real Postgres, ADR-0
     expect(card.complaint).toBe("Скърца при спиране");
     expect(card.diagnosis).toBe("Предни накладки на 2мм");
     expect(card.vehiclePlate).toBe("CA1234AB");
-    expect(card.laborByMechanic.map((g) => g.mechanicName)).toEqual(["Иван", "Петър"]);
-    expect(card.laborByMechanic[0].totalHours).toBe(1500);
-    expect(card.parts).toHaveLength(1);
-    expect(card.parts[0].description).toBe("Накладки предни");
+    expect(card.laborByMechanic).toMatchObject([
+      { mechanicName: "Иван", totalHours: 1500 },
+      { mechanicName: "Петър", totalHours: 500 },
+    ]);
+    expect(card.parts).toMatchObject([{ description: "Накладки предни" }]);
     expect(card.photos).toEqual([]);
   });
 
