@@ -14,6 +14,9 @@ import type { Db } from "./client";
 import {
   type CustomerKind,
   customer,
+  invoice,
+  invoiceLine,
+  invoiceSeries,
   type InvoiceStatus,
   type KanbanStage,
   type LineItemType,
@@ -285,6 +288,107 @@ const lineItemColumns = {
   currency: lineItem.currency,
   createdAt: lineItem.createdAt,
   updatedAt: lineItem.updatedAt,
+} as const;
+
+/**
+ * One **frozen** priced row on an issued Invoice as it crosses the service
+ * boundary (GF-14). The money/quantity columns keep the same exact integer
+ * encodings as a Line Item; unlike one, it never carries the attributed Mechanic —
+ * labor attribution is the Work Card's, not the legal document's (ADR-0009).
+ */
+export interface ScopedInvoiceLine {
+  id: string;
+  position: number;
+  type: LineItemType;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  amount: number;
+  currency: string;
+}
+
+/**
+ * An issued **Invoice** as it crosses the service boundary (GF-14) — the frozen
+ * header plus its frozen `lines`. Everything here is a snapshot taken at issue
+ * (ADR-0002): `vat` is `null` for a not-registered Location (a true zero-VAT
+ * invoice, ADR-0006), and the money columns are integer minor units (ADR-0011).
+ */
+export interface ScopedInvoice {
+  id: string;
+  repairOrderId: string;
+  series: string;
+  number: number;
+  issuedAt: Date;
+  vatMode: VatMode;
+  sellerVatNumber: string | null;
+  customerName: string;
+  vehiclePlate: string | null;
+  net: number;
+  vat: number | null;
+  gross: number;
+  currency: string;
+  lines: ScopedInvoiceLine[];
+}
+
+/**
+ * The frozen snapshot a service hands {@link ScopedDb.issueInvoice} — everything
+ * about the Invoice **except** the DB-assigned gapless `number` and the `issuedAt`
+ * freeze time, which the transaction allocates. The service computes the totals
+ * and shapes the lines (with `position`); ScopedDb owns only the atomic numbering,
+ * inserts, and the RO-status flip.
+ */
+export interface InvoiceIssueValues {
+  repairOrderId: string;
+  series: string;
+  vatMode: VatMode;
+  sellerVatNumber: string | null;
+  customerName: string;
+  vehiclePlate: string | null;
+  net: number;
+  vat: number | null;
+  gross: number;
+  currency: string;
+  lines: Array<{
+    position: number;
+    type: LineItemType;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    vatRate: number;
+    amount: number;
+    currency: string;
+  }>;
+}
+
+/** Explicit column projection for the frozen Invoice header — never raw rows (ADR-0016). */
+const invoiceColumns = {
+  id: invoice.id,
+  repairOrderId: invoice.repairOrderId,
+  series: invoice.series,
+  number: invoice.number,
+  issuedAt: invoice.issuedAt,
+  vatMode: invoice.vatMode,
+  sellerVatNumber: invoice.sellerVatNumber,
+  customerName: invoice.customerName,
+  vehiclePlate: invoice.vehiclePlate,
+  net: invoice.net,
+  vat: invoice.vat,
+  gross: invoice.gross,
+  currency: invoice.currency,
+} as const;
+
+/** Explicit column projection for the frozen Invoice lines. */
+const invoiceLineColumns = {
+  id: invoiceLine.id,
+  position: invoiceLine.position,
+  type: invoiceLine.type,
+  description: invoiceLine.description,
+  quantity: invoiceLine.quantity,
+  unitPrice: invoiceLine.unitPrice,
+  vatRate: invoiceLine.vatRate,
+  amount: invoiceLine.amount,
+  currency: invoiceLine.currency,
 } as const;
 
 /**
@@ -1053,5 +1157,201 @@ export class ScopedDb {
       throw new NotFoundError("Line item not found");
     }
     return row;
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Invoice predicate. */
+  #invoiceScope() {
+    return and(
+      eq(invoice.accountId, this.scope.accountId),
+      eq(invoice.locationId, this.scope.locationId),
+    );
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Invoice-line predicate. */
+  #invoiceLineScope() {
+    return and(
+      eq(invoiceLine.accountId, this.scope.accountId),
+      eq(invoiceLine.locationId, this.scope.locationId),
+    );
+  }
+
+  /** The frozen lines of one Invoice, in document order (`position`), scoped. */
+  async #loadInvoiceLines(invoiceId: string): Promise<ScopedInvoiceLine[]> {
+    return this.#db
+      .select(invoiceLineColumns)
+      .from(invoiceLine)
+      .where(and(eq(invoiceLine.invoiceId, invoiceId), this.#invoiceLineScope()))
+      .orderBy(asc(invoiceLine.position));
+  }
+
+  /** A single Invoice with its frozen lines, or `NotFoundError` if out of scope. */
+  async getInvoice(id: string): Promise<ScopedInvoice> {
+    const rows = await this.#db
+      .select(invoiceColumns)
+      .from(invoice)
+      .where(and(eq(invoice.id, id), this.#invoiceScope()))
+      .limit(1);
+
+    const header = rows[0];
+    if (!header) {
+      throw new NotFoundError("Invoice not found");
+    }
+    return { ...header, lines: await this.#loadInvoiceLines(header.id) };
+  }
+
+  /**
+   * The Invoice issued from a given Repair Order (ADR-0002 back-reference), or
+   * `null` when the order has not been invoiced. Scoped, so an order in another
+   * Account's Location yields `null`, never a cross-tenant read. One issued Invoice
+   * per order in v1; if that ever changes, the newest number wins.
+   */
+  async getInvoiceForRepairOrder(repairOrderId: string): Promise<ScopedInvoice | null> {
+    const rows = await this.#db
+      .select(invoiceColumns)
+      .from(invoice)
+      .where(and(eq(invoice.repairOrderId, repairOrderId), this.#invoiceScope()))
+      .orderBy(desc(invoice.number))
+      .limit(1);
+
+    const header = rows[0];
+    if (!header) {
+      return null;
+    }
+    return { ...header, lines: await this.#loadInvoiceLines(header.id) };
+  }
+
+  /**
+   * Issue an Invoice from a Repair Order (GF-14, ADR-0002) — the one place the
+   * frozen legal document is created, atomically. In a single transaction it:
+   *
+   * 1. Locks the RO row (`FOR UPDATE`) within scope, 404-ing a cross-tenant order
+   *    and raising `ConflictError` if it is already invoiced — the authoritative
+   *    double-issue guard, held under the lock so two concurrent issues can't both
+   *    pass.
+   * 2. Takes the **next gapless number** for `(location, series)` via an atomic
+   *    `ON CONFLICT` upsert on {@link invoiceSeries} — serialised on the unique key,
+   *    so numbers are unique and sequential; a rollback releases the number rather
+   *    than leaving a gap.
+   * 3. Inserts the frozen header and its frozen lines (the caller's snapshot).
+   * 4. Flips the RO's `invoice_status` to `invoiced` — a reference only (ADR-0002),
+   *    never a rewrite of the Invoice.
+   *
+   * The whole thing commits or rolls back together, so a failure never leaves a
+   * consumed number, a half-written Invoice, or a mismatched RO status.
+   */
+  async issueInvoice(values: InvoiceIssueValues): Promise<ScopedInvoice> {
+    return this.#db.transaction(async (tx) => {
+      // 1. Lock the order and guard double-issue under the lock.
+      const orderRows = await tx
+        .select({ id: repairOrder.id, invoiceStatus: repairOrder.invoiceStatus })
+        .from(repairOrder)
+        .where(
+          and(
+            eq(repairOrder.id, values.repairOrderId),
+            eq(repairOrder.accountId, this.scope.accountId),
+            eq(repairOrder.locationId, this.scope.locationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      const order = orderRows[0];
+      if (!order) {
+        throw new NotFoundError("Repair order not found");
+      }
+      if (order.invoiceStatus === "invoiced") {
+        throw new ConflictError("Repair order is already invoiced");
+      }
+
+      // 2. Allocate the next gapless number for this (location, series).
+      const counterRows = await tx
+        .insert(invoiceSeries)
+        .values({
+          accountId: this.scope.accountId,
+          locationId: this.scope.locationId,
+          series: values.series,
+          lastNumber: 1,
+        })
+        .onConflictDoUpdate({
+          target: [invoiceSeries.locationId, invoiceSeries.series],
+          set: { lastNumber: sql`${invoiceSeries.lastNumber} + 1`, updatedAt: new Date() },
+        })
+        .returning({ lastNumber: invoiceSeries.lastNumber });
+
+      const number = counterRows[0]?.lastNumber;
+      if (number === undefined) {
+        throw new ConflictError("Could not allocate an invoice number");
+      }
+
+      // 3. Freeze the header…
+      const headerRows = await tx
+        .insert(invoice)
+        .values({
+          accountId: this.scope.accountId,
+          locationId: this.scope.locationId,
+          repairOrderId: values.repairOrderId,
+          series: values.series,
+          number,
+          vatMode: values.vatMode,
+          sellerVatNumber: values.sellerVatNumber,
+          customerName: values.customerName,
+          vehiclePlate: values.vehiclePlate,
+          net: values.net,
+          vat: values.vat,
+          gross: values.gross,
+          currency: values.currency,
+        })
+        .returning(invoiceColumns);
+
+      const header = headerRows[0];
+      if (!header) {
+        throw new ConflictError("Invoice could not be issued");
+      }
+
+      // …and its lines.
+      if (values.lines.length > 0) {
+        await tx.insert(invoiceLine).values(
+          values.lines.map((line) => ({
+            accountId: this.scope.accountId,
+            locationId: this.scope.locationId,
+            invoiceId: header.id,
+            position: line.position,
+            type: line.type,
+            description: line.description,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            vatRate: line.vatRate,
+            amount: line.amount,
+            currency: line.currency,
+          })),
+        );
+      }
+
+      // 4. Update the RO's invoice_status reference (ADR-0002).
+      await tx
+        .update(repairOrder)
+        .set({ invoiceStatus: "invoiced", updatedAt: new Date() })
+        .where(
+          and(
+            eq(repairOrder.id, values.repairOrderId),
+            eq(repairOrder.accountId, this.scope.accountId),
+            eq(repairOrder.locationId, this.scope.locationId),
+          ),
+        );
+
+      const lines = await tx
+        .select(invoiceLineColumns)
+        .from(invoiceLine)
+        .where(
+          and(
+            eq(invoiceLine.invoiceId, header.id),
+            eq(invoiceLine.accountId, this.scope.accountId),
+            eq(invoiceLine.locationId, this.scope.locationId),
+          ),
+        )
+        .orderBy(asc(invoiceLine.position));
+
+      return { ...header, lines };
+    });
   }
 }
