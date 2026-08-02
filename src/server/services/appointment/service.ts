@@ -28,8 +28,8 @@ import {
   getDayAgendaSchema,
 } from "./schema";
 
-export type { ScopedAppointment } from "../../db/scoped-db";
 export type { AppointmentStatus } from "../../db/schema";
+export type { ScopedAppointment } from "../../db/scoped-db";
 
 /**
  * One row of the agenda: an Appointment plus the ids of the other slots it
@@ -151,10 +151,7 @@ export function buildAgenda(appointments: ScopedAppointment[], date: string): Da
  * optional links; ScopedDb enforces scope membership of each link and, per
  * ADR-0007, never blocks an overlap — the agenda surfaces conflicts instead.
  */
-export async function createAppointment(
-  scope: Scope,
-  input: unknown,
-): Promise<ScopedAppointment> {
+export async function createAppointment(scope: Scope, input: unknown): Promise<ScopedAppointment> {
   const parsed = createAppointmentSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError("Invalid appointment", z.flattenError(parsed.error).fieldErrors);
@@ -194,10 +191,7 @@ export async function getDayAgenda(scope: Scope, input: unknown): Promise<DayAge
  * Cancel an Appointment (GF-19) — the slot's only status change (there is no hard
  * delete). Scoped, so a slot outside the caller's Location 404s. Idempotent.
  */
-export async function cancelAppointment(
-  scope: Scope,
-  input: unknown,
-): Promise<ScopedAppointment> {
+export async function cancelAppointment(scope: Scope, input: unknown): Promise<ScopedAppointment> {
   const parsed = cancelAppointmentSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError("Invalid appointment id", z.flattenError(parsed.error).fieldErrors);
