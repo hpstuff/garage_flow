@@ -29,6 +29,10 @@ type LineItemFormProps = {
   mechanics: MechanicOption[];
   /** The edit target — absent when adding. */
   lineItem?: ScopedLineItem;
+  /** Whether the Location charges VAT (GF-12) — hides the rate field when false. */
+  vatRegistered: boolean;
+  /** Default VAT rate (percentage) to prefill new lines when registered. */
+  defaultVatRatePercent: number;
   /** Called after a successful save so the parent can refresh and close the form. */
   onSaved: () => void;
   onCancel: () => void;
@@ -47,6 +51,8 @@ export function LineItemForm({
   repairOrderId,
   mechanics,
   lineItem,
+  vatRegistered,
+  defaultVatRatePercent,
   onSaved,
   onCancel,
 }: LineItemFormProps) {
@@ -58,7 +64,11 @@ export function LineItemForm({
   const [mechanicId, setMechanicId] = useState(lineItem?.mechanicId ?? "");
   const [quantity, setQuantity] = useState(lineItem ? fromThousandths(lineItem.quantity) : "");
   const [unitPrice, setUnitPrice] = useState(lineItem ? fromMinorUnits(lineItem.unitPrice) : "");
-  const [vatRate, setVatRate] = useState(lineItem ? fromBasisPoints(lineItem.vatRate) : "20");
+  // Prefill the rate from the Location's default (GF-12); the field is hidden and
+  // submitted as 0 when the Location is not VAT-registered.
+  const [vatRate, setVatRate] = useState(
+    lineItem ? fromBasisPoints(lineItem.vatRate) : String(defaultVatRatePercent),
+  );
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -77,7 +87,8 @@ export function LineItemForm({
       mechanicId: type === "labor" ? mechanicId : "",
       quantity,
       unitPrice,
-      vatRate,
+      // A not-registered Location carries no VAT (ADR-0006): store the line at 0.
+      vatRate: vatRegistered ? vatRate : "0",
     };
     const result: LineItemMutationResult = isEdit
       ? await updateLineItemAction({ id: lineItem?.id, ...values })
@@ -155,7 +166,7 @@ export function LineItemForm({
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={vatRegistered ? "grid gap-4 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-2"}>
         <Field
           label={isLabor ? t("hours") : t("quantity")}
           error={firstError(fieldErrors, "quantity")}
@@ -184,17 +195,19 @@ export function LineItemForm({
           />
         </Field>
 
-        <Field label={t("vatRate")} error={firstError(fieldErrors, "vatRate")}>
-          <Input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max="100"
-            step="0.01"
-            value={vatRate}
-            onChange={(e) => setVatRate(e.target.value)}
-          />
-        </Field>
+        {vatRegistered ? (
+          <Field label={t("vatRate")} error={firstError(fieldErrors, "vatRate")}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              max="100"
+              step="0.01"
+              value={vatRate}
+              onChange={(e) => setVatRate(e.target.value)}
+            />
+          </Field>
+        ) : null}
       </div>
 
       {formError ? (

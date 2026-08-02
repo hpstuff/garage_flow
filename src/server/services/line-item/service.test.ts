@@ -18,6 +18,7 @@ import { db } from "../../db/client";
 import { customer, location, mechanic, organization, repairOrder, vehicle } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { NotFoundError, ValidationError } from "../../domain/errors";
+import type { VatConfig } from "../location/service";
 import {
   computeRepairOrderTotals,
   createLineItem,
@@ -31,6 +32,11 @@ import {
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
 
+/** A VAT-registered Location at the standard 20% rate. */
+const REGISTERED: VatConfig = { mode: "registered", rate: 2000, vatNumber: null };
+/** A not-registered Location — invoices carry no VAT (ADR-0006). */
+const NOT_REGISTERED: VatConfig = { mode: "not_registered" };
+
 describe("line item money math (pure, no DB)", () => {
   it("derives the net amount as round(quantity × unitPrice / 1000)", () => {
     // 1.5h (1500) at 50.00/h (5000) → 75.00 (7500 minor units).
@@ -41,24 +47,48 @@ describe("line item money math (pure, no DB)", () => {
     expect(lineItemAmount(333, 1000)).toBe(333);
   });
 
-  it("totals net, per-line-rounded VAT and gross from the lines", () => {
+  it("totals net, per-line-rounded VAT and gross from the lines when registered", () => {
     const items = [
       { amount: 7500, vatRate: 2000, currency: "BGN" }, // VAT 1500
       { amount: 5000, vatRate: 900, currency: "BGN" }, // VAT 450
       { amount: 3000, vatRate: 0, currency: "BGN" }, // VAT 0
     ] as ScopedLineItem[];
 
-    const totals = computeRepairOrderTotals(items);
+    const totals = computeRepairOrderTotals(items, REGISTERED);
     expect(totals.net).toBe(15500);
     expect(totals.vat).toBe(1950);
     expect(totals.gross).toBe(17450);
     expect(totals.currency).toBe("BGN");
   });
 
-  it("is all zero for an order with no lines", () => {
-    expect(computeRepairOrderTotals([])).toEqual({
+  it("carries a true zero-VAT total when not registered, ignoring per-line rates (ADR-0006)", () => {
+    // Same lines with non-zero VAT rates, but a not-registered Location means no
+    // VAT applies at all: `vat` is null (not 0) and gross equals net.
+    const items = [
+      { amount: 7500, vatRate: 2000, currency: "BGN" },
+      { amount: 5000, vatRate: 900, currency: "BGN" },
+    ] as ScopedLineItem[];
+
+    const totals = computeRepairOrderTotals(items, NOT_REGISTERED);
+    expect(totals.net).toBe(12500);
+    expect(totals.vat).toBeNull();
+    expect(totals.gross).toBe(12500);
+    expect(totals.currency).toBe("BGN");
+  });
+
+  it("is all zero for an order with no lines (registered → VAT 0)", () => {
+    expect(computeRepairOrderTotals([], REGISTERED)).toEqual({
       net: 0,
       vat: 0,
+      gross: 0,
+      currency: "BGN",
+    });
+  });
+
+  it("is net-only with null VAT for an order with no lines when not registered", () => {
+    expect(computeRepairOrderTotals([], NOT_REGISTERED)).toEqual({
+      net: 0,
+      vat: null,
       gross: 0,
       currency: "BGN",
     });
@@ -268,10 +298,10 @@ describe.skipIf(!hasDb)("line item service — integration (real Postgres, ADR-0
 
   it("derives the RO total from its lines, not the lead Mechanic", async () => {
     const lines = await listLineItems(scope(accountA, locationA), { repairOrderId: orderA });
-    const totals = computeRepairOrderTotals(lines);
+    const totals = computeRepairOrderTotals(lines, REGISTERED);
     const expectedNet = lines.reduce((sum, l) => sum + l.amount, 0);
     expect(totals.net).toBe(expectedNet);
-    expect(totals.gross).toBe(totals.net + totals.vat);
+    expect(totals.gross).toBe(totals.net + (totals.vat ?? 0));
   });
 
   it("edits a line's quantity and rate, recomputing the amount", async () => {

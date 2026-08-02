@@ -6,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
 import { computeRepairOrderTotals } from "@/server/services/line-item/service";
 import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
+import { getVatConfigAction } from "../../settings/_actions/vat-actions";
 import { listLineItemsAction } from "../_actions/line-item-actions";
 import { getRepairOrderAction } from "../_actions/repair-order-actions";
 import { LineItemsEditor } from "../_components/line-items-editor";
@@ -43,17 +45,25 @@ export default async function RepairOrderDetailPage({
   const vehicleDescription = [order.vehicleMake, order.vehicleModel].filter(Boolean).join(" ");
 
   // Line Items (GF-09) and the Mechanics they can attribute to. The RO total is
-  // derived from the lines (ADR-0009), never from the lead Mechanic. A failed
-  // load degrades to an empty editor rather than 404-ing the whole order.
-  const [itemsResult, mechanicsResult] = await Promise.all([
+  // derived from the lines (ADR-0009), never from the lead Mechanic, under the
+  // Location's VAT config (GF-12/ADR-0006) — a not-registered Location yields a
+  // true zero-VAT total. A failed load degrades to an empty editor / default VAT
+  // rather than 404-ing the whole order.
+  const [itemsResult, mechanicsResult, vatResult] = await Promise.all([
     listLineItemsAction(order.id),
     listMechanicsAction(),
+    getVatConfigAction(),
   ]);
   const lineItems = itemsResult.ok ? itemsResult.data : [];
   const mechanicOptions = mechanicsResult.ok
     ? mechanicsResult.data.map((mechanic) => ({ id: mechanic.id, name: mechanic.name }))
     : [];
-  const totals = computeRepairOrderTotals(lineItems);
+  // On a failed VAT load, fall back to the Location default (registered at the
+  // standard rate) rather than silently dropping VAT from a registered shop.
+  const vatConfig: VatConfig = vatResult.ok
+    ? vatResult.data
+    : { mode: "registered", rate: DEFAULT_VAT_RATE, vatNumber: null };
+  const totals = computeRepairOrderTotals(lineItems, vatConfig);
 
   return (
     <div className="space-y-6">
@@ -110,6 +120,7 @@ export default async function RepairOrderDetailPage({
         items={lineItems}
         totals={totals}
         mechanics={mechanicOptions}
+        vatConfig={vatConfig}
       />
     </div>
   );

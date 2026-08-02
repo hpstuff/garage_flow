@@ -19,6 +19,7 @@
  */
 
 import { z } from "zod";
+import type { VatConfig } from "../../../lib/vat";
 import { type Scope, scoped } from "../../db";
 import type { LineItemType } from "../../db/schema";
 import type { LineItemWriteValues, ScopedLineItem } from "../../db/scoped-db";
@@ -45,27 +46,46 @@ export function lineItemAmount(quantityThousandths: number, unitPriceMinor: numb
 export interface RepairOrderTotals {
   /** Sum of the net line amounts. */
   net: number;
-  /** VAT, rounded per line (basis points on the net amount) then summed. */
-  vat: number;
-  /** `net + vat`. */
+  /**
+   * VAT, rounded per line (basis points on the net amount) then summed — or
+   * `null` when the Location is **not VAT-registered** (ADR-0006). `null` is the
+   * true zero-VAT invoice: no VAT applies at all, distinct from a `0` that would
+   * mean "VAT applies and happens to be zero".
+   */
+  vat: number | null;
+  /** `net + vat` (registered), or just `net` when no VAT applies. */
   gross: number;
   currency: string;
 }
 
 /**
  * Derive a Repair Order's totals from its Line Items (ADR-0009) — never from the
- * RO's lead Mechanic. VAT is rounded per line and then summed, the standard
- * invoice rounding (GF-14 will formalise the definitive rules). Pure and
- * DB-free, so it is unit-tested directly and reused by the RO detail view.
+ * RO's lead Mechanic — under the Location's {@link VatConfig} (ADR-0006).
+ *
+ * When the Location is **not VAT-registered**, VAT does not apply *at all*: `vat`
+ * is `null` and `gross` equals `net`. This is a true zero-VAT invoice, not a
+ * cosmetic 0% rate — the per-line `vatRate` is ignored entirely. When it is
+ * registered, VAT is rounded per line (basis points on the net amount) then
+ * summed, the standard invoice rounding (GF-14 will formalise the definitive
+ * rules). Pure and DB-free, so it is unit-tested directly and reused by the RO
+ * detail view.
  */
-export function computeRepairOrderTotals(items: ScopedLineItem[]): RepairOrderTotals {
-  let net = 0;
+export function computeRepairOrderTotals(
+  items: ScopedLineItem[],
+  vatConfig: VatConfig,
+): RepairOrderTotals {
+  const net = items.reduce((sum, item) => sum + item.amount, 0);
+  const currency = items[0]?.currency ?? "BGN";
+
+  if (vatConfig.mode === "not_registered") {
+    return { net, vat: null, gross: net, currency };
+  }
+
   let vat = 0;
   for (const item of items) {
-    net += item.amount;
     vat += Math.round((item.amount * item.vatRate) / 10000);
   }
-  return { net, vat, gross: net + vat, currency: items[0]?.currency ?? "BGN" };
+  return { net, vat, gross: net + vat, currency };
 }
 
 /**
