@@ -239,7 +239,11 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
     expect(invoice.gross).toBe(14400);
 
     // First partial: 100,00 лв of 144,00.
-    const afterFirst = await recordPayment(s, { invoiceId: invoice.id, amount: 100, method: "cash" });
+    const afterFirst = await recordPayment(s, {
+      invoiceId: invoice.id,
+      amount: 100,
+      method: "cash",
+    });
     expect(afterFirst.totalPaid).toBe(10000);
     expect(afterFirst.balance).toBe(4400);
     expect(afterFirst.status).toBe("partially_paid");
@@ -286,7 +290,12 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
     const s = scope(accountA, locationA);
     const { invoice } = await invoiceOrder(accountA, locationA);
 
-    await recordPayment(s, { invoiceId: invoice.id, amount: 20, method: "bank_transfer", note: "нареждане" });
+    await recordPayment(s, {
+      invoiceId: invoice.id,
+      amount: 20,
+      method: "bank_transfer",
+      note: "нареждане",
+    });
     const summary = await getInvoicePayments(s, { invoiceId: invoice.id });
 
     expect(summary.payments).toHaveLength(1);
