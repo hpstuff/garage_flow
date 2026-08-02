@@ -80,7 +80,15 @@ export default async function VehicleDetailPage({ params }: { params: Promise<{ 
       </Card>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight">{t("repairOrders")}</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold tracking-tight">{t("repairOrders")}</h2>
+          <Link
+            href={`/vehicles/${vehicle.id}/history`}
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            {t("serviceHistory")} →
+          </Link>
+        </div>
         {orders.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
