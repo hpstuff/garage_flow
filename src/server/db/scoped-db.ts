@@ -23,6 +23,7 @@ import {
   type PaymentStatus,
   repairOrder,
   TERMINAL_KANBAN_STAGE,
+  type VatMode,
   type VehicleKind,
   vehicle,
 } from "./schema";
@@ -31,6 +32,25 @@ import type { Scope } from "./scope";
 export interface ScopedLocation {
   id: string;
   name: string;
+}
+
+/**
+ * The current Location's raw VAT settings (GF-12) — the stored columns as-is:
+ * `mode`, the default `rate` in basis points, and the ДДС `vatNumber`. The
+ * service shapes these into the {@link VatConfig} value object; when the mode is
+ * `not_registered`, `rate`/`vatNumber` are stored but carry no meaning.
+ */
+export interface ScopedVatSettings {
+  mode: VatMode;
+  rate: number;
+  vatNumber: string | null;
+}
+
+/** The VAT settings a caller may write — scope-derived columns are never here. */
+export interface VatSettingsWriteValues {
+  mode: VatMode;
+  rate: number;
+  vatNumber: string | null;
 }
 
 /** A Customer as it crosses the service boundary — an explicit, safe projection. */
@@ -362,6 +382,56 @@ export class ScopedDb {
       throw new NotFoundError("Location not found for the current scope");
     }
     return row.hiddenStages;
+  }
+
+  /**
+   * The current Location's VAT settings (GF-12, ADR-0006) — mode, default rate and
+   * ДДС number. Scoped by `accountId` + `locationId`, so a scope only ever reads
+   * its own Location's configuration.
+   */
+  async getVatSettings(): Promise<ScopedVatSettings> {
+    const rows = await this.#db
+      .select({
+        mode: location.vatMode,
+        rate: location.vatRate,
+        vatNumber: location.vatNumber,
+      })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row;
+  }
+
+  /**
+   * Replace the current Location's VAT settings (GF-12). Scoped by `accountId` +
+   * `locationId`, so one Account can never touch another's VAT configuration.
+   */
+  async setVatSettings(values: VatSettingsWriteValues): Promise<ScopedVatSettings> {
+    const rows = await this.#db
+      .update(location)
+      .set({
+        vatMode: values.mode,
+        vatRate: values.rate,
+        vatNumber: values.vatNumber,
+        updatedAt: new Date(),
+      })
+      .where(this.#locationScope())
+      .returning({
+        mode: location.vatMode,
+        rate: location.vatRate,
+        vatNumber: location.vatNumber,
+      });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row;
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */

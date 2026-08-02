@@ -9,7 +9,13 @@
  */
 
 import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { DEFAULT_VAT_RATE, VAT_MODES } from "../../lib/vat";
 import { organization, user } from "./auth-schema";
+
+// VAT domain constants/types live in a transport-free module (src/lib/vat) so
+// client components can import them without the DB client; re-exported here for
+// server code that reaches for them via the schema (GF-12, ADR-0006).
+export { DEFAULT_VAT_RATE, VAT_MODES, type VatMode } from "../../lib/vat";
 
 /**
  * **Kanban Stage** (GF-10) — where a Vehicle physically is in the workflow
@@ -37,18 +43,13 @@ export const INITIAL_KANBAN_STAGE: KanbanStage = "waiting";
 export const TERMINAL_KANBAN_STAGE: KanbanStage = "delivered";
 
 /**
- * A Location's **VAT mode** (GF-12, ADR-0006). VAT is a per-Location setting: a
- * `registered` Location charges VAT at its configured `vat_rate`; a
+ * A Location's **VAT mode** column (GF-12, ADR-0006). VAT is a per-Location
+ * setting: a `registered` Location charges VAT at its configured `vat_rate`; a
  * `not_registered` one (below the registration threshold) issues invoices that
  * carry **no VAT at all** — a *true* zero-VAT mode, not a cosmetic 0% rate. The
  * distinction drives the Invoice/VAT math (see `computeRepairOrderTotals`).
  */
-export const VAT_MODES = ["registered", "not_registered"] as const;
-export type VatMode = (typeof VAT_MODES)[number];
 export const vatMode = pgEnum("vat_mode", VAT_MODES);
-
-/** Standard Bulgarian VAT rate in **basis points** (20% → 2000) — the default. */
-export const DEFAULT_VAT_RATE = 2000;
 
 export const location = pgTable("location", {
   id: uuid("id").primaryKey().defaultRandom(),
