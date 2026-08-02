@@ -21,8 +21,10 @@ import {
   formatVatRate,
 } from "@/lib/format";
 import { paymentStatusVariant } from "../../repair-orders/_components/status";
+import { getCreditNoteForInvoiceAction } from "../_actions/credit-note-actions";
 import { getInvoiceAction } from "../_actions/invoice-actions";
 import { getInvoicePaymentsAction } from "../_actions/payment-actions";
+import { IssueCreditNoteForm } from "../_components/issue-credit-note-form";
 import { RecordPaymentForm } from "../_components/record-payment-form";
 
 /**
@@ -39,6 +41,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const tPay = await getTranslations("invoices.payments");
   const tMethod = await getTranslations("invoices.payments.methods");
   const tPaymentStatus = await getTranslations("repairOrders.paymentStatus");
+  const tCredit = await getTranslations("invoices.creditNote");
   const { id } = await params;
 
   const result = await getInvoiceAction(id);
@@ -61,6 +64,13 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   // the common "settle in full" case; empty once nothing is left owed.
   const defaultAmount =
     settlement && settlement.balance > 0 ? (settlement.balance / 100).toFixed(2) : "";
+
+  // Credit Note (GF-16, ADR-0002). The only way to "correct" this immutable Invoice
+  // is a separate Credit Note that references it. If one exists, link to it; otherwise
+  // offer to issue one. Issuing never edits the Invoice below. A failed load degrades
+  // to no card rather than 404-ing the Invoice.
+  const creditNoteResult = await getCreditNoteForInvoiceAction(invoice.id);
+  const creditNote = creditNoteResult.ok ? creditNoteResult.data : null;
 
   return (
     <div className="space-y-6">
@@ -231,6 +241,38 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{tCredit("title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {creditNote ? (
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 p-4">
+              <div className="space-y-0.5">
+                <p className="text-sm text-muted-foreground">{tCredit("issued")}</p>
+                <p className="font-medium">
+                  {formatInvoiceNumber(creditNote.series, creditNote.number)} ·{" "}
+                  {formatMoney(creditNote.gross, creditNote.currency)}
+                </p>
+                {creditNote.reason ? (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {creditNote.reason}
+                  </p>
+                ) : null}
+              </div>
+              <Link
+                href={`/credit-notes/${creditNote.id}`}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                {tCredit("view")}
+              </Link>
+            </div>
+          ) : (
+            <IssueCreditNoteForm invoiceId={invoice.id} />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -13,6 +13,9 @@ import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
   type CustomerKind,
+  creditNote,
+  creditNoteLine,
+  creditNoteSeries,
   customer,
   type InvoiceStatus,
   invoice,
@@ -430,6 +433,119 @@ const paymentColumns = {
   note: payment.note,
   currency: payment.currency,
   createdAt: payment.createdAt,
+} as const;
+
+/**
+ * One **frozen** credited row on a Credit Note as it crosses the service boundary
+ * (GF-16) — the same shape and integer encodings as a {@link ScopedInvoiceLine},
+ * and like it never carrying the attributed Mechanic (ADR-0009).
+ */
+export interface ScopedCreditNoteLine {
+  id: string;
+  position: number;
+  type: LineItemType;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  amount: number;
+  currency: string;
+}
+
+/**
+ * An issued **Credit Note** as it crosses the service boundary (GF-16) — the frozen
+ * header plus its frozen `lines`. Everything is a snapshot taken at issue from the
+ * credited Invoice (ADR-0002): `invoiceSeries`/`invoiceNumber` echo the original
+ * document's printed number, `vat` is `null` when the Invoice carried no VAT
+ * (ADR-0006), and the money columns are integer minor units credited back (ADR-0011).
+ */
+export interface ScopedCreditNote {
+  id: string;
+  invoiceId: string;
+  repairOrderId: string;
+  series: string;
+  number: number;
+  issuedAt: Date;
+  invoiceSeries: string;
+  invoiceNumber: number;
+  vatMode: VatMode;
+  sellerVatNumber: string | null;
+  customerName: string;
+  vehiclePlate: string | null;
+  net: number;
+  vat: number | null;
+  gross: number;
+  reason: string | null;
+  currency: string;
+  lines: ScopedCreditNoteLine[];
+}
+
+/**
+ * The frozen snapshot a service hands {@link ScopedDb.issueCreditNote} — everything
+ * about the Credit Note **except** the DB-assigned gapless `number` and the
+ * `issuedAt` freeze time, which the transaction allocates. The service copies the
+ * credited Invoice into this shape; ScopedDb owns only the atomic numbering, the
+ * insert, and the one-per-Invoice guard.
+ */
+export interface CreditNoteIssueValues {
+  invoiceId: string;
+  repairOrderId: string;
+  series: string;
+  invoiceSeries: string;
+  invoiceNumber: number;
+  vatMode: VatMode;
+  sellerVatNumber: string | null;
+  customerName: string;
+  vehiclePlate: string | null;
+  net: number;
+  vat: number | null;
+  gross: number;
+  reason: string | null;
+  currency: string;
+  lines: Array<{
+    position: number;
+    type: LineItemType;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    vatRate: number;
+    amount: number;
+    currency: string;
+  }>;
+}
+
+/** Explicit column projection for the frozen Credit Note header — never raw rows (ADR-0016). */
+const creditNoteColumns = {
+  id: creditNote.id,
+  invoiceId: creditNote.invoiceId,
+  repairOrderId: creditNote.repairOrderId,
+  series: creditNote.series,
+  number: creditNote.number,
+  issuedAt: creditNote.issuedAt,
+  invoiceSeries: creditNote.invoiceSeries,
+  invoiceNumber: creditNote.invoiceNumber,
+  vatMode: creditNote.vatMode,
+  sellerVatNumber: creditNote.sellerVatNumber,
+  customerName: creditNote.customerName,
+  vehiclePlate: creditNote.vehiclePlate,
+  net: creditNote.net,
+  vat: creditNote.vat,
+  gross: creditNote.gross,
+  reason: creditNote.reason,
+  currency: creditNote.currency,
+} as const;
+
+/** Explicit column projection for the frozen Credit Note lines. */
+const creditNoteLineColumns = {
+  id: creditNoteLine.id,
+  position: creditNoteLine.position,
+  type: creditNoteLine.type,
+  description: creditNoteLine.description,
+  quantity: creditNoteLine.quantity,
+  unitPrice: creditNoteLine.unitPrice,
+  vatRate: creditNoteLine.vatRate,
+  amount: creditNoteLine.amount,
+  currency: creditNoteLine.currency,
 } as const;
 
 /**
@@ -1511,6 +1627,210 @@ export class ScopedDb {
         );
 
       return created;
+    });
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Credit Note predicate. */
+  #creditNoteScope() {
+    return and(
+      eq(creditNote.accountId, this.scope.accountId),
+      eq(creditNote.locationId, this.scope.locationId),
+    );
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Credit-Note-line predicate. */
+  #creditNoteLineScope() {
+    return and(
+      eq(creditNoteLine.accountId, this.scope.accountId),
+      eq(creditNoteLine.locationId, this.scope.locationId),
+    );
+  }
+
+  /** The frozen lines of one Credit Note, in document order (`position`), scoped. */
+  async #loadCreditNoteLines(creditNoteId: string): Promise<ScopedCreditNoteLine[]> {
+    return this.#db
+      .select(creditNoteLineColumns)
+      .from(creditNoteLine)
+      .where(and(eq(creditNoteLine.creditNoteId, creditNoteId), this.#creditNoteLineScope()))
+      .orderBy(asc(creditNoteLine.position));
+  }
+
+  /** A single Credit Note with its frozen lines, or `NotFoundError` if out of scope. */
+  async getCreditNote(id: string): Promise<ScopedCreditNote> {
+    const rows = await this.#db
+      .select(creditNoteColumns)
+      .from(creditNote)
+      .where(and(eq(creditNote.id, id), this.#creditNoteScope()))
+      .limit(1);
+
+    const header = rows[0];
+    if (!header) {
+      throw new NotFoundError("Credit note not found");
+    }
+    return { ...header, lines: await this.#loadCreditNoteLines(header.id) };
+  }
+
+  /**
+   * The Credit Note that corrects a given Invoice (ADR-0002 reference), or `null`
+   * when the Invoice has not been credited. Scoped, so an Invoice in another
+   * Account's Location yields `null`, never a cross-tenant read. At most one Credit
+   * Note per Invoice in the MVP (a full correction); if that ever changes, the
+   * newest number wins.
+   */
+  async getCreditNoteForInvoice(invoiceId: string): Promise<ScopedCreditNote | null> {
+    const rows = await this.#db
+      .select(creditNoteColumns)
+      .from(creditNote)
+      .where(and(eq(creditNote.invoiceId, invoiceId), this.#creditNoteScope()))
+      .orderBy(desc(creditNote.number))
+      .limit(1);
+
+    const header = rows[0];
+    if (!header) {
+      return null;
+    }
+    return { ...header, lines: await this.#loadCreditNoteLines(header.id) };
+  }
+
+  /**
+   * Issue a Credit Note against an issued Invoice (GF-16, ADR-0002) — the one place
+   * the frozen corrective document is created, atomically. In a single transaction
+   * it:
+   *
+   * 1. Locks the **Invoice** row (`FOR UPDATE`) within scope, 404-ing a cross-tenant
+   *    Invoice. The lock only serialises concurrent issuance and confirms the Invoice
+   *    exists — it never writes the Invoice, which stays immutable.
+   * 2. Guards **one Credit Note per Invoice** (the MVP's full correction): if one
+   *    already references this Invoice, raises `ConflictError` — checked under the
+   *    lock so two concurrent issues can't both pass.
+   * 3. Takes the **next gapless number** for `(location, series)` via an atomic
+   *    `ON CONFLICT` upsert on {@link creditNoteSeries} — serialised on the unique
+   *    key, so numbers are unique and sequential; a rollback releases the number.
+   * 4. Inserts the frozen header and its frozen lines (the caller's snapshot).
+   *
+   * It deliberately touches neither the Invoice nor the Repair Order — a Credit Note
+   * is a pure append, so the original Invoice remains immutable (the load-bearing
+   * ADR-0002 rule). Commits or rolls back together, so a failure never leaves a
+   * consumed number or a half-written Credit Note.
+   */
+  async issueCreditNote(values: CreditNoteIssueValues): Promise<ScopedCreditNote> {
+    return this.#db.transaction(async (tx) => {
+      // 1. Lock the Invoice and confirm it is in scope — never mutating it.
+      const invoiceRows = await tx
+        .select({ id: invoice.id })
+        .from(invoice)
+        .where(
+          and(
+            eq(invoice.id, values.invoiceId),
+            eq(invoice.accountId, this.scope.accountId),
+            eq(invoice.locationId, this.scope.locationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      if (!invoiceRows[0]) {
+        throw new NotFoundError("Invoice not found");
+      }
+
+      // 2. Guard one Credit Note per Invoice (MVP full correction), under the lock.
+      const existing = await tx
+        .select({ id: creditNote.id })
+        .from(creditNote)
+        .where(
+          and(
+            eq(creditNote.invoiceId, values.invoiceId),
+            eq(creditNote.accountId, this.scope.accountId),
+            eq(creditNote.locationId, this.scope.locationId),
+          ),
+        )
+        .limit(1);
+
+      if (existing[0]) {
+        throw new ConflictError("Invoice already has a credit note");
+      }
+
+      // 3. Allocate the next gapless number for this (location, series).
+      const counterRows = await tx
+        .insert(creditNoteSeries)
+        .values({
+          accountId: this.scope.accountId,
+          locationId: this.scope.locationId,
+          series: values.series,
+          lastNumber: 1,
+        })
+        .onConflictDoUpdate({
+          target: [creditNoteSeries.locationId, creditNoteSeries.series],
+          set: { lastNumber: sql`${creditNoteSeries.lastNumber} + 1`, updatedAt: new Date() },
+        })
+        .returning({ lastNumber: creditNoteSeries.lastNumber });
+
+      const number = counterRows[0]?.lastNumber;
+      if (number === undefined) {
+        throw new ConflictError("Could not allocate a credit note number");
+      }
+
+      // 4. Freeze the header…
+      const headerRows = await tx
+        .insert(creditNote)
+        .values({
+          accountId: this.scope.accountId,
+          locationId: this.scope.locationId,
+          invoiceId: values.invoiceId,
+          repairOrderId: values.repairOrderId,
+          series: values.series,
+          number,
+          invoiceSeries: values.invoiceSeries,
+          invoiceNumber: values.invoiceNumber,
+          vatMode: values.vatMode,
+          sellerVatNumber: values.sellerVatNumber,
+          customerName: values.customerName,
+          vehiclePlate: values.vehiclePlate,
+          net: values.net,
+          vat: values.vat,
+          gross: values.gross,
+          reason: values.reason,
+          currency: values.currency,
+        })
+        .returning(creditNoteColumns);
+
+      const header = headerRows[0];
+      if (!header) {
+        throw new ConflictError("Credit note could not be issued");
+      }
+
+      // …and its lines.
+      if (values.lines.length > 0) {
+        await tx.insert(creditNoteLine).values(
+          values.lines.map((line) => ({
+            accountId: this.scope.accountId,
+            locationId: this.scope.locationId,
+            creditNoteId: header.id,
+            position: line.position,
+            type: line.type,
+            description: line.description,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            vatRate: line.vatRate,
+            amount: line.amount,
+            currency: line.currency,
+          })),
+        );
+      }
+
+      const lines = await tx
+        .select(creditNoteLineColumns)
+        .from(creditNoteLine)
+        .where(
+          and(
+            eq(creditNoteLine.creditNoteId, header.id),
+            eq(creditNoteLine.accountId, this.scope.accountId),
+            eq(creditNoteLine.locationId, this.scope.locationId),
+          ),
+        )
+        .orderBy(asc(creditNoteLine.position));
+
+      return { ...header, lines };
     });
   }
 }
