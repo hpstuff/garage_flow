@@ -233,6 +233,17 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const paymentStatus = pgEnum("payment_status", PAYMENT_STATUSES);
 
 /**
+ * How a **Payment** against an Invoice was taken (GF-15). A small fixed set for
+ * the MVP — the front desk records cash, a card terminal, or a bank transfer.
+ * Purely descriptive: the method never affects the payment math or the derived
+ * `payment_status`, it just records how the money arrived. `cash` is the opening
+ * default, the common walk-in case.
+ */
+export const PAYMENT_METHODS = ["cash", "card", "bank_transfer"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const paymentMethod = pgEnum("payment_method", PAYMENT_METHODS);
+
+/**
  * A **Repair Order** is the central work record for one visit of one Vehicle
  * (CONTEXT.md, GF-08) — the heart of the app. It captures the **Complaint** (the
  * customer's words) and the **Diagnosis** (the mechanic's finding) as two
@@ -509,6 +520,52 @@ export const invoiceLine = pgTable("invoice_line", {
 });
 
 export type InvoiceLineRow = typeof invoiceLine.$inferSelect;
+
+/**
+ * A **Payment** recorded against an Invoice (GF-15, ADR-0002). Payments settle the
+ * Invoice — never the Repair Order and never the frozen document itself: an
+ * Invoice can take **several** Payments, and their `amount`s **sum toward its
+ * gross total**, which is how partial payment works. The RO's `payment_status` is
+ * derived from that sum versus the Invoice total and updated as a **reference**
+ * (ADR-0002), so recording a Payment touches the RO's status flag but leaves the
+ * immutable Invoice snapshot untouched.
+ *
+ * The table is **append-only**, matching the Invoice's immutability theme: a
+ * Payment is a financial record, so there is no update or delete path in the
+ * domain — a mistaken Payment is corrected by a future reversing entry, not by
+ * editing history. `amount` is **integer minor units** of `currency` (ADR-0011),
+ * copied from the Invoice at record time so a Payment can never be in a different
+ * currency than the document it settles. `method` records *how* the money arrived
+ * (see {@link PAYMENT_METHODS}); it never affects the math. `createdAt` is the
+ * record/receipt time — the single timestamp the MVP needs (back-dating a Payment
+ * is a later concern). Scoped to a **Location** (ADR-0003), reached only through
+ * ScopedDb (ADR-0013).
+ */
+export const payment = pgTable("payment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Invoice this Payment settles (ADR-0002). Cascades with the Invoice. */
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoice.id, { onDelete: "cascade" }),
+  /** The amount received, in integer minor units of `currency` (ADR-0011); always > 0. */
+  amount: integer("amount").notNull(),
+  /** How the money arrived (GF-15); descriptive only, never affects the math. */
+  method: paymentMethod("method").notNull().default("cash"),
+  /** Optional free-text note (a reference number, a remark), never shown to the Customer. */
+  note: text("note"),
+  /** Explicit currency, copied from the Invoice at record time (ADR-0011); BGN in the MVP. */
+  currency: text("currency").notNull().default("BGN"),
+  /** When the Payment was recorded/received — the single timestamp the MVP needs. */
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PaymentRow = typeof payment.$inferSelect;
 
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
