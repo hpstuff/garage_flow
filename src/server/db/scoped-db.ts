@@ -12,10 +12,10 @@ import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
+  type CustomerKind,
   creditNote,
   creditNoteLine,
   creditNoteSeries,
-  type CustomerKind,
   customer,
   type InvoiceStatus,
   invoice,

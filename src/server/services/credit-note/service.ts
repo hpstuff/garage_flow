@@ -102,7 +102,11 @@ export async function issueCreditNote(scope: Scope, input: unknown): Promise<Sco
   const db = scoped(scope);
   const invoice = await db.getInvoice(parsed.data.invoiceId);
   return db.issueCreditNote(
-    buildCreditNoteInput({ invoice, series: DEFAULT_CREDIT_NOTE_SERIES, reason: parsed.data.reason }),
+    buildCreditNoteInput({
+      invoice,
+      series: DEFAULT_CREDIT_NOTE_SERIES,
+      reason: parsed.data.reason,
+    }),
   );
 }
 

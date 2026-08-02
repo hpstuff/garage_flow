@@ -148,9 +148,9 @@ describe("issue/get credit note — validation (no DB, ADR-0016)", () => {
   it("rejects issuing with a missing / non-uuid / unexpected invoiceId", async () => {
     await expect(issueCreditNote(s, {})).rejects.toBeInstanceOf(ValidationError);
     await expect(issueCreditNote(s, { invoiceId: "nope" })).rejects.toBeInstanceOf(ValidationError);
-    await expect(
-      issueCreditNote(s, { invoiceId: randomUUID(), extra: 1 }),
-    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(issueCreditNote(s, { invoiceId: randomUUID(), extra: 1 })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 
   it("rejects a reason over the length cap", async () => {
@@ -346,9 +346,9 @@ describe.skipIf(!hasDb)("credit note service — integration (real Postgres, ADR
     await expect(
       issueCreditNote(scope(accountB, locationB), { invoiceId: invoice.id }),
     ).rejects.toBeInstanceOf(NotFoundError);
-    await expect(
-      getCreditNote(scope(accountB, locationB), { id: note.id }),
-    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(getCreditNote(scope(accountB, locationB), { id: note.id })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
     expect(
       await getCreditNoteForInvoice(scope(accountB, locationB), { invoiceId: invoice.id }),
     ).toBeNull();
