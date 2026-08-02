@@ -8,13 +8,15 @@
  * private to this class.
  */
 
-import { and, asc, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
   type AppointmentStatus,
   appointment,
+  type ConsentPurpose,
   type CustomerKind,
+  consent,
   creditNote,
   creditNoteLine,
   creditNoteSeries,
@@ -100,6 +102,47 @@ const customerColumns = {
   note: customer.note,
   createdAt: customer.createdAt,
   updatedAt: customer.updatedAt,
+} as const;
+
+/**
+ * A Consent as it crosses the service boundary (GF-20). A timestamped, revocable
+ * record for one optional purpose (ADR-0004): `revokedAt` is `null` while it
+ * stands and the withdrawal instant once revoked — never a boolean. A Customer
+ * has many of these, so consumers read the set, not a flag.
+ */
+export interface ScopedConsent {
+  id: string;
+  customerId: string;
+  purpose: ConsentPurpose;
+  grantedAt: Date;
+  revokedAt: Date | null;
+  note: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The fields a caller may set when **granting** a Consent — scope-derived columns
+ * are never here, and neither are `grantedAt`/`revokedAt`: granting stamps
+ * `grantedAt = now` with `revokedAt = null`, and revocation is its own path
+ * ({@link ScopedDb.revokeConsent}), never a free-form column write.
+ */
+export interface ConsentGrantValues {
+  customerId: string;
+  purpose: ConsentPurpose;
+  note: string | null;
+}
+
+/** Explicit column projection — never return raw rows (ADR-0016). */
+const consentColumns = {
+  id: consent.id,
+  customerId: consent.customerId,
+  purpose: consent.purpose,
+  grantedAt: consent.grantedAt,
+  revokedAt: consent.revokedAt,
+  note: consent.note,
+  createdAt: consent.createdAt,
+  updatedAt: consent.updatedAt,
 } as const;
 
 /**
@@ -842,6 +885,125 @@ export class ScopedDb {
     const row = rows[0];
     if (!row) {
       throw new NotFoundError("Customer not found");
+    }
+    return row;
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Consent predicate. */
+  #consentScope() {
+    return and(
+      eq(consent.accountId, this.scope.accountId),
+      eq(consent.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * Every Consent a Customer holds (GF-20), newest decision first — the full,
+   * un-collapsed history, so a revoked purpose and a later re-grant both show. The
+   * Customer is asserted in scope first, so listing another Account's Customer
+   * raises `NotFoundError` rather than silently returning an empty set. The service
+   * derives "currently consented to X" from this set (a purpose whose `revokedAt`
+   * is `null`); this method never applies that rule, it just returns the records.
+   */
+  async listConsents(customerId: string): Promise<ScopedConsent[]> {
+    await this.#assertCustomerInScope(customerId);
+    return this.#db
+      .select(consentColumns)
+      .from(consent)
+      .where(and(eq(consent.customerId, customerId), this.#consentScope()))
+      .orderBy(desc(consent.grantedAt), desc(consent.createdAt), asc(consent.id));
+  }
+
+  /** A single Consent, or `NotFoundError` if it is not in the caller's scope. */
+  async getConsent(id: string): Promise<ScopedConsent> {
+    const rows = await this.#db
+      .select(consentColumns)
+      .from(consent)
+      .where(and(eq(consent.id, id), this.#consentScope()))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Consent not found");
+    }
+    return row;
+  }
+
+  /**
+   * Grant a Consent for one optional purpose (GF-20, ADR-0004). The Customer is
+   * asserted in scope first, so a Consent can never be attached to a cross-tenant
+   * Customer. **Idempotent per active purpose**: if the Customer already has a
+   * standing (un-revoked) Consent for this purpose, that record is returned
+   * unchanged rather than inserting a duplicate — so at most one Consent is active
+   * for a given purpose, while a fresh grant *after* a revocation still makes a new
+   * record, preserving the decision history. Concurrent grants of the same purpose
+   * are benign: two active rows carry the same meaning, and the service's "latest
+   * active wins" read collapses them.
+   */
+  async grantConsent(values: ConsentGrantValues): Promise<ScopedConsent> {
+    await this.#assertCustomerInScope(values.customerId);
+
+    const active = await this.#db
+      .select(consentColumns)
+      .from(consent)
+      .where(
+        and(
+          eq(consent.customerId, values.customerId),
+          eq(consent.purpose, values.purpose),
+          isNull(consent.revokedAt),
+          this.#consentScope(),
+        ),
+      )
+      .orderBy(desc(consent.grantedAt))
+      .limit(1);
+
+    const standing = active[0];
+    if (standing) {
+      return standing;
+    }
+
+    const rows = await this.#db
+      .insert(consent)
+      .values({
+        accountId: this.scope.accountId,
+        locationId: this.scope.locationId,
+        customerId: values.customerId,
+        purpose: values.purpose,
+        note: values.note,
+      })
+      .returning(consentColumns);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Consent could not be granted");
+    }
+    return row;
+  }
+
+  /**
+   * Revoke a Consent within the caller's scope (GF-20) — stamps `revokedAt` with
+   * the withdrawal instant (ADR-0004), the only change a Consent ever makes (there
+   * is no hard delete, matching the other tables). The row is loaded scoped first,
+   * so one in another Account's Location is invisible and revoking it raises
+   * `NotFoundError`. **Idempotent**: revoking an already-revoked Consent is a no-op
+   * that returns it with its original `revokedAt` intact.
+   */
+  async revokeConsent(id: string): Promise<ScopedConsent> {
+    const current = await this.getConsent(id);
+    if (current.revokedAt !== null) {
+      return current;
+    }
+
+    const now = new Date();
+    const rows = await this.#db
+      .update(consent)
+      .set({ revokedAt: now, updatedAt: now })
+      .where(and(eq(consent.id, id), this.#consentScope()))
+      .returning(consentColumns);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Consent not found");
     }
     return row;
   }

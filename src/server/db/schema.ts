@@ -129,6 +129,67 @@ export const customer = pgTable("customer", {
 export type CustomerRow = typeof customer.$inferSelect;
 
 /**
+ * A **Consent**'s optional **purpose** (GF-20, ADR-0004). Consent is stored only
+ * for the *optional* messaging purposes — SMS/Viber reminders and marketing
+ * (CONTEXT.md). Servicing and invoicing rest on **contract and legal obligation**,
+ * not consent, so they are deliberately absent from this set: there is no
+ * "consent to be serviced/invoiced" purpose, and revoking a Consent can never
+ * stop the garage doing the work or issuing the фактура.
+ */
+export const CONSENT_PURPOSES = ["sms", "viber", "marketing"] as const;
+export type ConsentPurpose = (typeof CONSENT_PURPOSES)[number];
+export const consentPurpose = pgEnum("consent_purpose", CONSENT_PURPOSES);
+
+/**
+ * A **Consent** is a timestamped, revocable record that a Customer agreed to one
+ * specific optional purpose (CONTEXT.md, GF-20, ADR-0004). It is deliberately
+ * **not** a boolean on the Customer — consent under GDPR is purpose-scoped and
+ * revocable — so a Customer holds *many* Consents: one per purpose, and a fresh
+ * record each time a purpose is granted again after revocation, which preserves
+ * the decision history rather than overwriting it.
+ *
+ * The row carries exactly the three things ADR-0004 requires, and nothing that
+ * would turn it into a single flag:
+ * - `purpose` — which optional processing it authorises ({@link CONSENT_PURPOSES}).
+ * - `grantedAt` — when the Customer agreed (the timestamp).
+ * - `revokedAt` — the revocation: `null` while the consent stands, set to the
+ *   instant it was withdrawn. Modelling revocation as a *timestamp*, not a
+ *   boolean, keeps the "when" GDPR cares about and makes "currently consented to
+ *   X" a plain `purpose = X AND revoked_at IS NULL` read.
+ *
+ * Servicing/invoicing never consult this table (ADR-0004): a revoked — or absent —
+ * Consent can never block a Repair Order or an Invoice. `customerId` cascades so
+ * tearing down a Customer (or an Account) clears its Consents. Scoped to a
+ * **Location** like every operational row (ADR-0003), reached only through
+ * ScopedDb (ADR-0013).
+ */
+export const consent = pgTable("consent", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Customer who gave this consent. Cascades so removing a Customer clears its Consents. */
+  customerId: uuid("customer_id")
+    .notNull()
+    .references(() => customer.id, { onDelete: "cascade" }),
+  /** Which optional purpose it authorises (ADR-0004) — messaging only, never servicing. */
+  purpose: consentPurpose("purpose").notNull(),
+  /** When the Customer agreed — the consent timestamp (ADR-0004); defaults to now on grant. */
+  grantedAt: timestamp("granted_at").defaultNow().notNull(),
+  /** Revocation instant; `null` while the consent stands (ADR-0004). Never a boolean flag. */
+  revokedAt: timestamp("revoked_at"),
+  /** Optional internal note on how consent was captured (e.g. "signed form"), never shown externally. */
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ConsentRow = typeof consent.$inferSelect;
+
+/**
  * A **Vehicle** is a specific car or motorcycle the garage services
  * (CONTEXT.md). ADR-0001 scopes the MVP to general repair, so `kind` is limited
  * to those two — no tire/body/fleet variants.
