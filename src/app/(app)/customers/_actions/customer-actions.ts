@@ -5,6 +5,7 @@ import type { ActionResult } from "@/app/lib/action-result";
 import { requireScope } from "@/app/lib/session";
 import { type FieldErrors, isDomainError, ValidationError } from "@/server/domain/errors";
 import {
+  anonymizeCustomer,
   createCustomer,
   getCustomer,
   listCustomers,
@@ -79,6 +80,24 @@ export async function updateCustomerAction(input: unknown): Promise<CustomerMuta
     const data = await updateCustomer(scope, input);
     revalidatePath("/customers");
     revalidatePath(`/customers/${data.id}/edit`);
+    return { ok: true, data };
+  } catch (error) {
+    return toMutationError(error);
+  }
+}
+
+/**
+ * Anonymize a Customer (GF-21, ADR-0004) — the right-to-erasure action. Strips the
+ * PII, marks the anonymized state, and unlinks its Vehicles; issued Invoices are
+ * retained. Irreversible, so the client confirms first. Revalidates the list and
+ * this Customer's edit page so both reflect the anonymized state.
+ */
+export async function anonymizeCustomerAction(id: string): Promise<CustomerMutationResult> {
+  try {
+    const scope = await requireScope();
+    const data = await anonymizeCustomer(scope, { id });
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${id}/edit`);
     return { ok: true, data };
   } catch (error) {
     return toMutationError(error);
