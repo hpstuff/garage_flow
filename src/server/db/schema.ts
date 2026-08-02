@@ -8,7 +8,7 @@
  * and reached only through ScopedDb (ADR-0013).
  */
 
-import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { DEFAULT_VAT_RATE, VAT_MODES } from "../../lib/vat";
 import { organization, user } from "./auth-schema";
 
@@ -352,6 +352,163 @@ export const lineItem = pgTable("line_item", {
 });
 
 export type LineItemRow = typeof lineItem.$inferSelect;
+
+/**
+ * The **legal series** an Invoice's gapless number is drawn from. Bulgarian VAT
+ * law numbers invoices per series; the MVP issues from a single default series
+ * per Location, but the concept is modelled from day one so multiple series ship
+ * as a feature, not a migration (mirrors how Location is modelled before
+ * multi-branch, ADR-0003).
+ */
+export const DEFAULT_INVOICE_SERIES = "A";
+
+/**
+ * The gapless-numbering counter (GF-14, ADR-0002/0006). Bulgarian VAT law requires
+ * a **gapless sequential number per legal series per Location** — so the counter is
+ * keyed by `(locationId, series)` and holds the **last** number issued in that
+ * series. Issuing an Invoice increments it atomically (an `ON CONFLICT` upsert
+ * serialised on the unique key, inside the same transaction as the Invoice insert),
+ * so two concurrent issues can never take the same number and a rolled-back issue
+ * releases its number rather than leaving a gap. This is deliberately its own
+ * table, not a column on the Invoice — the number source must survive independently
+ * of any single document (ADR-0002: do not "simplify" the machinery away).
+ */
+export const invoiceSeries = pgTable(
+  "invoice_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id, { onDelete: "cascade" }),
+    /** The legal series these numbers belong to (CONTEXT.md); `A` in the MVP. */
+    series: text("series").notNull().default(DEFAULT_INVOICE_SERIES),
+    /** The last number issued in this `(location, series)`; the next Invoice takes `+1`. */
+    lastNumber: integer("last_number").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("invoice_series_location_series_unique").on(t.locationId, t.series)],
+);
+
+export type InvoiceSeriesRow = typeof invoiceSeries.$inferSelect;
+
+/**
+ * An **Invoice** is a first-class legal document generated from a Repair Order's
+ * Line Items and **frozen at issue time** (CONTEXT.md, GF-14, ADR-0002): it
+ * snapshots the priced lines, the amounts, and the VAT, and never changes
+ * afterward — corrections happen through a Credit Note, never by editing. The
+ * table is **append-only**: there is no update or delete path in the domain, so
+ * editing the source Repair Order (its lines, its Customer) cannot alter an issued
+ * Invoice.
+ *
+ * `number` is the **gapless sequential number** within `series`, drawn from
+ * {@link invoiceSeries}; the `(locationId, series, number)` unique index is the
+ * hard guarantee that a number is never duplicated. `issuedAt` is the freeze time.
+ *
+ * Everything else is a **snapshot** taken at issue, not a live reference:
+ * - `vatMode` + `sellerVatNumber` — the Location's VAT registration as it stood,
+ *   so a later settings change never rewrites history (ADR-0006).
+ * - `customerName` + `vehiclePlate` — the buyer/vehicle identity as printed.
+ * - `net` / `vat` / `gross` — the money totals in **integer minor units** of
+ *   `currency` (ADR-0011). `vat` is **null** when the Location is not VAT-registered
+ *   — a true zero-VAT invoice, distinct from a `0` that would mean "VAT applies and
+ *   is zero" (ADR-0006).
+ *
+ * `repairOrderId` records which order it was issued from (a back-reference for the
+ * RO's `invoice_status`, ADR-0002); it deliberately carries **none** of the Work
+ * Card's internal narrative (Complaint/Diagnosis) — the Invoice is the
+ * financial/legal subset only (ADR-0009). Scoped to a **Location** (ADR-0003),
+ * reached only through ScopedDb (ADR-0013).
+ */
+export const invoice = pgTable(
+  "invoice",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id, { onDelete: "cascade" }),
+    /** The Repair Order this Invoice was issued from (ADR-0002 back-reference). */
+    repairOrderId: uuid("repair_order_id")
+      .notNull()
+      .references(() => repairOrder.id, { onDelete: "cascade" }),
+    /** The legal series (CONTEXT.md); pairs with {@link invoiceSeries}. */
+    series: text("series").notNull().default(DEFAULT_INVOICE_SERIES),
+    /** Gapless sequential number within `series` — unique per Location per series. */
+    number: integer("number").notNull(),
+    /** The freeze time — when the lines/amounts/VAT below became immutable. */
+    issuedAt: timestamp("issued_at").defaultNow().notNull(),
+    /** Snapshot of the Location's VAT mode at issue (ADR-0006). */
+    vatMode: vatMode("vat_mode").notNull(),
+    /** Snapshot of the seller's ДДС number at issue; null when not registered. */
+    sellerVatNumber: text("seller_vat_number"),
+    /** Snapshot of the buyer's name as printed on the document. */
+    customerName: text("customer_name").notNull(),
+    /** Snapshot of the Vehicle's registration plate, when it had one. */
+    vehiclePlate: text("vehicle_plate"),
+    /** Net total (sum of line amounts) in integer minor units (ADR-0011). */
+    net: integer("net").notNull(),
+    /** VAT total in minor units, or **null** when the Location is not registered (ADR-0006). */
+    vat: integer("vat"),
+    /** Gross total (`net + vat`, or `net` when no VAT applies) in minor units. */
+    gross: integer("gross").notNull(),
+    /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
+    currency: text("currency").notNull().default("BGN"),
+  },
+  (t) => [unique("invoice_location_series_number_unique").on(t.locationId, t.series, t.number)],
+);
+
+export type InvoiceRow = typeof invoice.$inferSelect;
+
+/**
+ * One **frozen** priced row on an issued Invoice (GF-14, ADR-0002) — the snapshot
+ * of a Line Item as it stood at issue time. It is a *copy*, not a reference: the
+ * source Line Item stays editable/deletable on a not-yet-invoiced Repair Order, but
+ * once frozen here nothing about it changes. `position` preserves the order the
+ * lines were entered, which is how they read on the document.
+ *
+ * The money/quantity columns keep the same exact integer encodings as Line Item
+ * (`quantity` in thousandths, `unitPrice`/`amount` in minor units, `vatRate` in
+ * basis points — see {@link lineItem}). It deliberately does **not** copy the
+ * attributed Mechanic: labor attribution belongs to the Work Card (ADR-0009), not
+ * the legal document. Scoped to a **Location** (ADR-0003), reached only through
+ * ScopedDb (ADR-0013).
+ */
+export const invoiceLine = pgTable("invoice_line", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Invoice this frozen line belongs to. Cascades with the Invoice. */
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoice.id, { onDelete: "cascade" }),
+  /** 1-based order the line appeared on the source Repair Order, preserved on the document. */
+  position: integer("position").notNull(),
+  type: lineItemType("type").notNull(),
+  /** What the line is, in words — copied from the Line Item at issue. */
+  description: text("description").notNull(),
+  /** Hours (Labor) or count (Part), in thousandths — frozen (ADR-0011). */
+  quantity: integer("quantity").notNull(),
+  /** Hourly rate (Labor) or unit price (Part), in integer minor units — frozen. */
+  unitPrice: integer("unit_price").notNull(),
+  /** Per-line VAT rate in basis points (20% → 2000) — frozen. */
+  vatRate: integer("vat_rate").notNull(),
+  /** Net line total in minor units — frozen at the value computed at issue. */
+  amount: integer("amount").notNull(),
+  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
+  currency: text("currency").notNull().default("BGN"),
+});
+
+export type InvoiceLineRow = typeof invoiceLine.$inferSelect;
 
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.

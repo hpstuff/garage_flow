@@ -40,3 +40,13 @@ export function formatVatRate(basisPoints: number): string {
 export function formatDate(value: Date | string | number): string {
   return new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium" }).format(new Date(value));
 }
+
+/**
+ * Render an Invoice's gapless number as it appears on the фактура (GF-14): the
+ * legal `series` and the sequential number zero-padded to ten digits, the standard
+ * Bulgarian presentation (e.g. `A-0000000001`). The stored number stays a plain
+ * integer (ADR-0011) — this is display only.
+ */
+export function formatInvoiceNumber(series: string, number: number): string {
+  return `${series}-${String(number).padStart(10, "0")}`;
+}
