@@ -8,10 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
 import { computeRepairOrderTotals } from "@/server/services/line-item/service";
+import { getInvoiceForRepairOrderAction } from "../../invoices/_actions/invoice-actions";
 import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
 import { getVatConfigAction } from "../../settings/_actions/vat-actions";
 import { listLineItemsAction } from "../_actions/line-item-actions";
 import { getRepairOrderAction } from "../_actions/repair-order-actions";
+import { IssueInvoiceButton } from "../_components/issue-invoice-button";
 import { LineItemsEditor } from "../_components/line-items-editor";
 import { stageBadgeVariant } from "../_components/stages";
 import { invoiceStatusVariant, paymentStatusVariant } from "../_components/status";
@@ -65,6 +67,13 @@ export default async function RepairOrderDetailPage({
     : { mode: "registered", rate: DEFAULT_VAT_RATE, vatNumber: null };
   const totals = computeRepairOrderTotals(lineItems, vatConfig);
 
+  // Invoicing (GF-14, ADR-0002). When the order is already invoiced, resolve the
+  // issued Invoice so the header links straight to the frozen document; otherwise
+  // it offers to issue one from the current Line Items.
+  const invoiceResult =
+    order.invoiceStatus === "invoiced" ? await getInvoiceForRepairOrderAction(order.id) : null;
+  const issuedInvoice = invoiceResult?.ok ? invoiceResult.data : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -88,7 +97,19 @@ export default async function RepairOrderDetailPage({
             {[vehicleDescription, order.customerName].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 items-start gap-2">
+          {order.invoiceStatus === "invoiced" ? (
+            issuedInvoice ? (
+              <Link
+                href={`/invoices/${issuedInvoice.id}`}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                {t("viewInvoice")}
+              </Link>
+            ) : null
+          ) : (
+            <IssueInvoiceButton repairOrderId={order.id} />
+          )}
           <Link
             href={`/repair-orders/${order.id}/work-card`}
             className={buttonVariants({ variant: "outline" })}
