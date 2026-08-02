@@ -12,6 +12,7 @@ import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
+  ANONYMIZED_CUSTOMER_NAME,
   type AppointmentStatus,
   appointment,
   type ConsentPurpose,
@@ -75,6 +76,8 @@ export interface ScopedCustomer {
   address: string | null;
   taxId: string | null;
   note: string | null;
+  /** The Anonymization instant (GF-21) — `null` while live, the erasure time once anonymized. */
+  anonymizedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -100,6 +103,7 @@ const customerColumns = {
   address: customer.address,
   taxId: customer.taxId,
   note: customer.note,
+  anonymizedAt: customer.anonymizedAt,
   createdAt: customer.createdAt,
   updatedAt: customer.updatedAt,
 } as const;
@@ -148,11 +152,14 @@ const consentColumns = {
 /**
  * A Vehicle as it crosses the service boundary. Carries the current owner's
  * `customerId` plus their `customerName`, joined for display so a list needn't
- * fetch each owner separately.
+ * fetch each owner separately. `customerId` is `null` for a Vehicle whose owner
+ * was **anonymized** (GF-21) — the erasure unlinks it — and in that case
+ * `customerName` reads {@link ANONYMIZED_CUSTOMER_NAME}, coalesced from the absent
+ * owner so the field stays a plain `string` for every consumer.
  */
 export interface ScopedVehicle {
   id: string;
-  customerId: string;
+  customerId: string | null;
   customerName: string;
   kind: VehicleKind;
   plate: string | null;
@@ -675,6 +682,16 @@ function looseIdentifier(term: string): string {
   return term.replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
+/**
+ * The owner's display name for a Vehicle/Repair-Order projection, resilient to an
+ * **anonymized** owner (GF-21). The owner join is `left` — a Vehicle whose Customer
+ * was anonymized has its link cleared (ADR-0004), so there is no owner row — and
+ * this coalesces the absent name to {@link ANONYMIZED_CUSTOMER_NAME}. Keeping the
+ * fallback here lets `customerName` stay a plain `string` for every consumer while
+ * the underlying link is honestly nullable.
+ */
+const ownerName = sql<string>`coalesce(${customer.name}, ${ANONYMIZED_CUSTOMER_NAME})`;
+
 export class ScopedDb {
   readonly scope: Scope;
   readonly #db: Db;
@@ -889,6 +906,82 @@ export class ScopedDb {
     return row;
   }
 
+  /**
+   * **Anonymize** a Customer within the caller's scope (GF-21, ADR-0004) — the
+   * right-to-erasure action, which is *not* a delete. In a single transaction it:
+   *
+   * 1. Locks the Customer row (`FOR UPDATE`) within scope, 404-ing a cross-tenant
+   *    Customer and serialising concurrent erasures.
+   * 2. Is **idempotent**: an already-anonymized Customer (its `anonymizedAt` set) is
+   *    returned unchanged — the PII is already gone and its Vehicles already
+   *    unlinked, so re-running never re-stamps the instant or touches Vehicles.
+   * 3. Strips the PII: `name` → {@link ANONYMIZED_CUSTOMER_NAME} (the column is
+   *    `NOT NULL`, so it is replaced, not blanked), and `email`/`phone`/`address`/
+   *    `taxId`/`note` → null. Stamps `anonymizedAt` with the erasure instant — the
+   *    anonymized state, distinct from row deletion.
+   * 4. **Unlinks every Vehicle**: clears `customerId` on the Customer's Vehicles in
+   *    scope, so no Vehicle points back at the erased person. Each Vehicle survives
+   *    (its Service History keys off Repair Orders, not this link).
+   *
+   * It deliberately never touches Invoices: an issued Invoice snapshots the buyer
+   * name at issue and references the Repair Order, so it retains its legally-required
+   * minimum untouched, and — because this is an update, never a delete, and the
+   * Vehicle FK is `set null` — no cascade path can remove it (ADR-0004). Consents
+   * are left as-is; they cascade only on a real Customer/Account teardown, which this
+   * is not. Commits or rolls back together, so PII-strip and unlink never diverge.
+   */
+  async anonymizeCustomer(id: string): Promise<ScopedCustomer> {
+    return this.#db.transaction(async (tx) => {
+      // 1. Lock the Customer in scope; a cross-tenant id is invisible → 404.
+      const currentRows = await tx
+        .select(customerColumns)
+        .from(customer)
+        .where(and(eq(customer.id, id), this.#customerScope()))
+        .for("update")
+        .limit(1);
+
+      const current = currentRows[0];
+      if (!current) {
+        throw new NotFoundError("Customer not found");
+      }
+
+      // 2. Idempotent: already anonymized → return as-is, touch nothing.
+      if (current.anonymizedAt !== null) {
+        return current;
+      }
+
+      // 3. Strip the PII and stamp the erasure instant.
+      const now = new Date();
+      const rows = await tx
+        .update(customer)
+        .set({
+          name: ANONYMIZED_CUSTOMER_NAME,
+          email: null,
+          phone: null,
+          address: null,
+          taxId: null,
+          note: null,
+          anonymizedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(customer.id, id), this.#customerScope()))
+        .returning(customerColumns);
+
+      const anonymized = rows[0];
+      if (!anonymized) {
+        throw new NotFoundError("Customer not found");
+      }
+
+      // 4. Unlink every Vehicle the Customer owned (in scope) — no back-reference survives.
+      await tx
+        .update(vehicle)
+        .set({ customerId: null, updatedAt: now })
+        .where(and(eq(vehicle.customerId, id), this.#vehicleScope()));
+
+      return anonymized;
+    });
+  }
+
   /** The scope's `{ accountId, locationId }` as a reusable Consent predicate. */
   #consentScope() {
     return and(
@@ -1083,9 +1176,9 @@ export class ScopedDb {
     }
 
     return this.#db
-      .select({ ...vehicleColumns, customerName: customer.name })
+      .select({ ...vehicleColumns, customerName: ownerName })
       .from(vehicle)
-      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .leftJoin(customer, eq(customer.id, vehicle.customerId))
       .where(and(...conditions))
       .orderBy(asc(vehicle.plate));
   }
@@ -1112,9 +1205,9 @@ export class ScopedDb {
     const orderBy = loose ? [rank, asc(vehicle.plate)] : [asc(vehicle.plate)];
 
     return this.#db
-      .select({ ...vehicleColumns, customerName: customer.name })
+      .select({ ...vehicleColumns, customerName: ownerName })
       .from(vehicle)
-      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .leftJoin(customer, eq(customer.id, vehicle.customerId))
       .where(and(this.#vehicleScope(), match))
       .orderBy(...orderBy)
       .limit(limit);
@@ -1123,9 +1216,9 @@ export class ScopedDb {
   /** A single Vehicle, or `NotFoundError` if it is not in the caller's scope. */
   async getVehicle(id: string): Promise<ScopedVehicle> {
     const rows = await this.#db
-      .select({ ...vehicleColumns, customerName: customer.name })
+      .select({ ...vehicleColumns, customerName: ownerName })
       .from(vehicle)
-      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .leftJoin(customer, eq(customer.id, vehicle.customerId))
       .where(and(eq(vehicle.id, id), this.#vehicleScope()))
       .limit(1);
 
@@ -1300,10 +1393,12 @@ export class ScopedDb {
 
   /**
    * The full Repair Order projection: base columns plus the joined Vehicle
-   * identity, owner name, and optional lead Mechanic name. The Vehicle/owner
-   * joins are inner (an RO always has both); the Mechanic join is left (the lead
-   * is optional, so `mechanicName` is null when unassigned). Constrained to the
-   * caller's scope by `where`.
+   * identity, owner name, and optional lead Mechanic name. The Vehicle join is
+   * inner (an RO always has a Vehicle); the owner join is **left**, because the
+   * Vehicle's owner may have been anonymized and unlinked (GF-21) — `customerName`
+   * then coalesces to {@link ANONYMIZED_CUSTOMER_NAME} via {@link ownerName}. The
+   * Mechanic join is left too (the lead is optional, so `mechanicName` is null when
+   * unassigned). Constrained to the caller's scope by `where`.
    */
   #selectRepairOrders(where: ReturnType<typeof and>) {
     return this.#db
@@ -1313,12 +1408,12 @@ export class ScopedDb {
         vehicleVin: vehicle.vin,
         vehicleMake: vehicle.make,
         vehicleModel: vehicle.model,
-        customerName: customer.name,
+        customerName: ownerName,
         mechanicName: mechanic.name,
       })
       .from(repairOrder)
       .innerJoin(vehicle, eq(vehicle.id, repairOrder.vehicleId))
-      .innerJoin(customer, eq(customer.id, vehicle.customerId))
+      .leftJoin(customer, eq(customer.id, vehicle.customerId))
       .leftJoin(mechanic, eq(mechanic.id, repairOrder.mechanicId))
       .where(where);
   }
