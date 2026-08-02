@@ -167,3 +167,18 @@
     color: var(--color-foreground);
   }
 }
+
+/*
+ * Print (GF-17): documents such as the Invoice фактура print as clean sheets. The
+ * app chrome and page controls opt out with Tailwind's `print:hidden`; here we set
+ * sensible page margins and a white canvas so a dark-theme viewer still prints
+ * black-on-white.
+ */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: #fff;
+  }
+}
