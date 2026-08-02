@@ -88,12 +88,20 @@ export default async function RepairOrderDetailPage({
             {[vehicleDescription, order.customerName].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <Link
-          href={`/repair-orders/${order.id}/edit`}
-          className={buttonVariants({ variant: "outline" })}
-        >
-          {t("edit")}
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href={`/repair-orders/${order.id}/work-card`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t("workCard")}
+          </Link>
+          <Link
+            href={`/repair-orders/${order.id}/edit`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t("edit")}
+          </Link>
+        </div>
       </div>
 
       <Card>
