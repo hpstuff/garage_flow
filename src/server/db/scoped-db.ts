@@ -8,10 +8,12 @@
  * private to this class.
  */
 
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
+  type AppointmentStatus,
+  appointment,
   type CustomerKind,
   creditNote,
   creditNoteLine,
@@ -185,6 +187,67 @@ const mechanicColumns = {
 } as const;
 
 /**
+ * An Appointment as it crosses the service boundary (GF-19). Carries the joined
+ * display fields the agenda needs without a second fetch: the reserved Mechanic's
+ * name, and the expected Vehicle's plate/VIN. `customerName` is resolved for
+ * display — the **linked** Customer's own name when `customerId` is set, otherwise
+ * the free-text name typed for a phone booking (CONTEXT.md), so a row always shows
+ * who the slot is for. The `[startsAt, endsAt)` range and `status` are what the
+ * overlap check and the day filter read.
+ */
+export interface ScopedAppointment {
+  id: string;
+  customerId: string | null;
+  vehicleId: string | null;
+  vehiclePlate: string | null;
+  vehicleVin: string | null;
+  mechanicId: string | null;
+  mechanicName: string | null;
+  bay: string | null;
+  /** Who the slot is for: the linked Customer's name, else the free-text booking name. */
+  customerName: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  status: AppointmentStatus;
+  note: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * The Appointment fields a caller may set — scope-derived columns are never here,
+ * and `status` is excluded because it opens at `scheduled` and only ever moves
+ * through {@link ScopedDb.cancelAppointment}, never a free-form column write. Each
+ * of the optional links (`customerId`/`vehicleId`/`mechanicId`) is checked for
+ * scope membership before the write, so none can point across the tenant boundary.
+ */
+export interface AppointmentWriteValues {
+  customerId: string | null;
+  vehicleId: string | null;
+  mechanicId: string | null;
+  bay: string | null;
+  customerName: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  note: string | null;
+}
+
+/** Explicit base column projection — the joined display fields are added per query. */
+const appointmentColumns = {
+  id: appointment.id,
+  customerId: appointment.customerId,
+  vehicleId: appointment.vehicleId,
+  mechanicId: appointment.mechanicId,
+  bay: appointment.bay,
+  startsAt: appointment.startsAt,
+  endsAt: appointment.endsAt,
+  status: appointment.status,
+  note: appointment.note,
+  createdAt: appointment.createdAt,
+  updatedAt: appointment.updatedAt,
+} as const;
+
+/**
  * A Repair Order as it crosses the service boundary (GF-08). Carries the joined
  * Vehicle identity (plate/VIN/make/model) and owner name for display, plus the
  * optional lead Mechanic's name, so a list or detail needn't fetch them
@@ -201,6 +264,8 @@ export interface ScopedRepairOrder {
   customerName: string;
   mechanicId: string | null;
   mechanicName: string | null;
+  /** The Appointment this visit was booked as (GF-19) — read-only here; null for a walk-in. */
+  appointmentId: string | null;
   complaint: string | null;
   diagnosis: string | null;
   /** Kanban Stage (GF-10) — where the car is on the board; independent of the statuses. */
@@ -217,6 +282,10 @@ export interface ScopedRepairOrder {
  * reference-only, owned by the invoicing/payment slices (ADR-0002); and `stage`
  * is excluded because it moves only through {@link ScopedDb.moveRepairOrderStage}
  * (GF-10), which enforces the terminal rule — never a free-form column write.
+ *
+ * The optional `appointmentId` link (GF-19) is deliberately **not** here either: it
+ * is set once, at open time, as a separate argument to
+ * {@link ScopedDb.createRepairOrder}, and the edit path never rewrites it.
  */
 export interface RepairOrderWriteValues {
   vehicleId: string;
@@ -230,6 +299,7 @@ const repairOrderColumns = {
   id: repairOrder.id,
   vehicleId: repairOrder.vehicleId,
   mechanicId: repairOrder.mechanicId,
+  appointmentId: repairOrder.appointmentId,
   complaint: repairOrder.complaint,
   diagnosis: repairOrder.diagnosis,
   stage: repairOrder.stage,
@@ -1030,9 +1100,13 @@ export class ScopedDb {
    * Assert a Vehicle is in the caller's scope, or raise `NotFoundError`. A
    * `vehicleId` from another Account's Location is invisible here, so a Repair
    * Order can never be opened against (or moved onto) a cross-tenant Vehicle —
-   * the FK alone would not stop that, since it is not scope-aware.
+   * the FK alone would not stop that, since it is not scope-aware. `null` (an
+   * Appointment with no expected Vehicle — a walk-in slot) is always fine.
    */
-  async #assertVehicleInScope(vehicleId: string): Promise<void> {
+  async #assertVehicleInScope(vehicleId: string | null): Promise<void> {
+    if (vehicleId === null) {
+      return;
+    }
     const rows = await this.#db
       .select({ id: vehicle.id })
       .from(vehicle)
@@ -1115,18 +1189,26 @@ export class ScopedDb {
 
   /**
    * Open a Repair Order against an in-scope Vehicle, in the current Location. The
-   * Vehicle and the optional lead Mechanic are checked for scope membership first,
-   * so neither can point across the tenant boundary.
+   * Vehicle, the optional lead Mechanic, and the optional booking `appointmentId`
+   * (GF-19) are checked for scope membership first, so none can point across the
+   * tenant boundary. `appointmentId` is a **create-only** link — the car arrived,
+   * so this order *is* that Appointment (CONTEXT.md); the edit path never rewrites
+   * it. Defaults to `null` for a walk-in.
    */
-  async createRepairOrder(values: RepairOrderWriteValues): Promise<ScopedRepairOrder> {
+  async createRepairOrder(
+    values: RepairOrderWriteValues,
+    appointmentId: string | null = null,
+  ): Promise<ScopedRepairOrder> {
     await this.#assertVehicleInScope(values.vehicleId);
     await this.#assertMechanicInScope(values.mechanicId);
+    await this.#assertAppointmentInScope(appointmentId);
 
     const rows = await this.#db
       .insert(repairOrder)
       .values({
         accountId: this.scope.accountId,
         locationId: this.scope.locationId,
+        appointmentId,
         ...values,
       })
       .returning({ id: repairOrder.id });
@@ -1832,5 +1914,155 @@ export class ScopedDb {
 
       return { ...header, lines };
     });
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Appointment predicate. */
+  #appointmentScope() {
+    return and(
+      eq(appointment.accountId, this.scope.accountId),
+      eq(appointment.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * Assert an optional Customer is in the caller's scope. `null` (a walk-in slot,
+   * no named Customer) is always fine; a `customerId` from another Account's
+   * Location raises `NotFoundError`, so an Appointment can never name a
+   * cross-tenant Customer — the FK alone is not scope-aware.
+   */
+  async #assertCustomerInScope(customerId: string | null): Promise<void> {
+    if (customerId === null) {
+      return;
+    }
+    const rows = await this.#db
+      .select({ id: customer.id })
+      .from(customer)
+      .where(and(eq(customer.id, customerId), this.#customerScope()))
+      .limit(1);
+    if (!rows[0]) {
+      throw new NotFoundError("Customer not found");
+    }
+  }
+
+  /**
+   * Assert an optional Appointment is in the caller's scope (GF-19). `null` (a
+   * walk-in, no booking) is always fine; an `appointmentId` from another Account's
+   * Location raises `NotFoundError`, so a Repair Order can never link to a
+   * cross-tenant Appointment.
+   */
+  async #assertAppointmentInScope(appointmentId: string | null): Promise<void> {
+    if (appointmentId === null) {
+      return;
+    }
+    const rows = await this.#db
+      .select({ id: appointment.id })
+      .from(appointment)
+      .where(and(eq(appointment.id, appointmentId), this.#appointmentScope()))
+      .limit(1);
+    if (!rows[0]) {
+      throw new NotFoundError("Appointment not found");
+    }
+  }
+
+  /**
+   * The full Appointment projection: base columns plus the joined Vehicle
+   * identity, the reserved Mechanic's name, and the resolved `customerName` — the
+   * linked Customer's own name when present, else the free-text booking name
+   * (CONTEXT.md). Every join is left: each link is optional (a walk-in has none),
+   * so the joined fields are null when unset. Constrained to the caller's scope by
+   * `where`.
+   */
+  #selectAppointments(where: ReturnType<typeof and>) {
+    return this.#db
+      .select({
+        ...appointmentColumns,
+        vehiclePlate: vehicle.plate,
+        vehicleVin: vehicle.vin,
+        mechanicName: mechanic.name,
+        customerName: sql<string | null>`coalesce(${customer.name}, ${appointment.customerName})`,
+      })
+      .from(appointment)
+      .leftJoin(customer, eq(customer.id, appointment.customerId))
+      .leftJoin(vehicle, eq(vehicle.id, appointment.vehicleId))
+      .leftJoin(mechanic, eq(mechanic.id, appointment.mechanicId))
+      .where(where);
+  }
+
+  /**
+   * Appointments whose slot **starts** within the half-open `[from, to)` range,
+   * earliest first — the query behind one day of the agenda (GF-19). Ordering is
+   * by `startsAt` then `endsAt` then `id`, a total order so the day reads
+   * deterministically. Scoped, so another Account's slots are invisible.
+   */
+  async listAppointments(range: { from: Date; to: Date }): Promise<ScopedAppointment[]> {
+    return this.#selectAppointments(
+      and(
+        this.#appointmentScope(),
+        gte(appointment.startsAt, range.from),
+        lt(appointment.startsAt, range.to),
+      ),
+    ).orderBy(asc(appointment.startsAt), asc(appointment.endsAt), asc(appointment.id));
+  }
+
+  /** A single Appointment, or `NotFoundError` if it is not in the caller's scope. */
+  async getAppointment(id: string): Promise<ScopedAppointment> {
+    const rows = await this.#selectAppointments(
+      and(eq(appointment.id, id), this.#appointmentScope()),
+    ).limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Appointment not found");
+    }
+    return row;
+  }
+
+  /**
+   * Book an Appointment in the current Location (GF-19). The optional Customer,
+   * Vehicle and Mechanic links are each checked for scope membership first, so
+   * none can point across the tenant boundary. It deliberately never checks for an
+   * overlapping slot: ADR-0007 defers double-booking *prevention* — conflicts are
+   * surfaced on the agenda, not blocked here.
+   */
+  async createAppointment(values: AppointmentWriteValues): Promise<ScopedAppointment> {
+    await this.#assertCustomerInScope(values.customerId);
+    await this.#assertVehicleInScope(values.vehicleId);
+    await this.#assertMechanicInScope(values.mechanicId);
+
+    const rows = await this.#db
+      .insert(appointment)
+      .values({
+        accountId: this.scope.accountId,
+        locationId: this.scope.locationId,
+        ...values,
+      })
+      .returning({ id: appointment.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Appointment could not be created");
+    }
+    return this.getAppointment(row.id);
+  }
+
+  /**
+   * Cancel an Appointment within the caller's scope (GF-19) — the only status
+   * change the slot ever makes (there is no hard delete, matching the other
+   * tables). The `WHERE` is scoped, so a slot in another Account's Location is
+   * invisible and cancelling it raises `NotFoundError`. Idempotent: cancelling an
+   * already-cancelled slot is a no-op that still returns it.
+   */
+  async cancelAppointment(id: string): Promise<ScopedAppointment> {
+    const rows = await this.#db
+      .update(appointment)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(and(eq(appointment.id, id), this.#appointmentScope()))
+      .returning({ id: appointment.id });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Appointment not found");
+    }
+    return this.getAppointment(row.id);
   }
 }

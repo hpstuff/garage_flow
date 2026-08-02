@@ -61,6 +61,7 @@ function fakeOrder(overrides: Partial<ScopedRepairOrder> = {}): ScopedRepairOrde
     customerName: "Мария",
     mechanicId: null,
     mechanicName: null,
+    appointmentId: null,
     complaint: "Скърца при спиране",
     diagnosis: null,
     stage: "repairing",
