@@ -214,6 +214,79 @@ export const mechanic = pgTable("mechanic", {
 export type MechanicRow = typeof mechanic.$inferSelect;
 
 /**
+ * An **Appointment**'s lifecycle status (GF-19, ADR-0007). The v1 agenda keeps
+ * this deliberately minimal: a slot is `scheduled` when booked and `cancelled` if
+ * it falls through — there is no hard-delete path, matching every other table.
+ *
+ * "Arrived" is **not** a status: arrival is recorded by opening a Repair Order
+ * linked to the Appointment (CONTEXT.md), so it is *derivable* from that link and
+ * must never become a second, drift-prone source of truth.
+ */
+export const APPOINTMENT_STATUSES = ["scheduled", "cancelled"] as const;
+export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
+export const appointmentStatus = pgEnum("appointment_status", APPOINTMENT_STATUSES);
+
+/** Every Appointment opens as `scheduled`; cancelling is the only status change. */
+export const INITIAL_APPOINTMENT_STATUS: AppointmentStatus = "scheduled";
+
+/**
+ * An **Appointment** is a reserved time slot on the agenda for a Mechanic and/or
+ * bay (CONTEXT.md, GF-19, ADR-0007). ADR-0007 scopes v1 to a **basic day/agenda
+ * view** — assign a Mechanic, warn on obvious conflicts — and explicitly defers
+ * the rich drag-and-drop calendar with double-booking *prevention*. So the entity
+ * and its Repair-Order link are modelled now (no migration later), but nothing
+ * here enforces non-overlap: conflicts are *surfaced*, not blocked, by the service.
+ *
+ * The slot is `[startsAt, endsAt)`; two timestamps are the minimum a day view and
+ * the overlap check need. Everything else is **optional**, because a walk-in slot
+ * can have none (CONTEXT.md):
+ * - `mechanicId` / `bay` — the resources the slot reserves. `bay` is free text: v1
+ *   has no separate Bay entity (deferred with the calendar), just a name the front
+ *   desk types. Both `set null` so removing a Mechanic never deletes the slot.
+ * - `customerId` / `vehicleId` — who the slot is for. `set null` keeps the slot if
+ *   the Customer/Vehicle is later removed. A booking usually names the Vehicle so
+ *   the front desk can open the Repair Order straight from the agenda when the car
+ *   arrives.
+ * - `customerName` — a free-text name for a phone booking whose caller is not yet a
+ *   Customer record; when `customerId` is set, the Customer's own name is
+ *   authoritative and this is ignored for display.
+ *
+ * Scoped to a **Location** like every operational row (ADR-0003), reached only
+ * through ScopedDb (ADR-0013).
+ */
+export const appointment = pgTable("appointment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** Who the slot is for — optional; a walk-in has none. Unlinking a Customer nulls this. */
+  customerId: uuid("customer_id").references(() => customer.id, { onDelete: "set null" }),
+  /** The Vehicle expected — optional; lets the agenda open a Repair Order on arrival. */
+  vehicleId: uuid("vehicle_id").references(() => vehicle.id, { onDelete: "set null" }),
+  /** The Mechanic reserved for the slot (ADR-0007) — optional. Unlinking nulls this. */
+  mechanicId: uuid("mechanic_id").references(() => mechanic.id, { onDelete: "set null" }),
+  /** Free-text bay label — v1 has no Bay entity (deferred with the calendar); optional. */
+  bay: text("bay"),
+  /** Free-text caller name for a phone booking not yet a Customer; ignored when linked. */
+  customerName: text("customer_name"),
+  /** Slot start — the wall-clock time the car is booked in. */
+  startsAt: timestamp("starts_at").notNull(),
+  /** Slot end — pairs with `startsAt` to give the range the overlap check compares. */
+  endsAt: timestamp("ends_at").notNull(),
+  /** Lifecycle status (GF-19); opens at `scheduled`, only ever moves to `cancelled`. */
+  status: appointmentStatus("status").notNull().default(INITIAL_APPOINTMENT_STATUS),
+  /** Internal free-text note (reason for the visit, a phone number), never shown externally. */
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type AppointmentRow = typeof appointment.$inferSelect;
+
+/**
  * Whether a Repair Order has been turned into an Invoice yet. This is a
  * **reference only** on the RO (ADR-0002): the Invoice is the immutable
  * first-class document, and this flag is set by the invoicing slice (GF-14),
@@ -281,6 +354,13 @@ export const repairOrder = pgTable("repair_order", {
     .references(() => vehicle.id, { onDelete: "cascade" }),
   /** Optional lead Mechanic (ADR-0009). Unlinking a Mechanic nulls this, not the order. */
   mechanicId: uuid("mechanic_id").references(() => mechanic.id, { onDelete: "set null" }),
+  /**
+   * The **Appointment** this visit was booked as (GF-19, ADR-0007) — optional: a
+   * walk-in has none (CONTEXT.md). Set once, when the car arrives and the order is
+   * opened from the agenda; `set null` keeps the order if the Appointment is ever
+   * removed, and the order's edit path never touches this link.
+   */
+  appointmentId: uuid("appointment_id").references(() => appointment.id, { onDelete: "set null" }),
   /** The problem in the customer's own words (CONTEXT.md). Distinct from the Diagnosis. */
   complaint: text("complaint"),
   /** The mechanic's finding after inspection (CONTEXT.md). Distinct from the Complaint. */
