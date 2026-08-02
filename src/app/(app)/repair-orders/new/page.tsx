@@ -13,15 +13,16 @@ import { RepairOrderForm } from "../_components/repair-order-form";
  * the Vehicle picker is populated from the current Location; with none yet, we
  * send the front desk to add a Vehicle first. `?vehicleId=` preselects a Vehicle
  * — the speed-first path from the GF-06 search → Vehicle detail → new order. The
- * lead Mechanic is optional (ADR-0009).
+ * lead Mechanic is optional (ADR-0009). `?appointmentId=` links the order to the
+ * booking it arrived for (GF-19) — the agenda's "open order" path.
  */
 export default async function NewRepairOrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vehicleId?: string }>;
+  searchParams: Promise<{ vehicleId?: string; appointmentId?: string }>;
 }) {
   const t = await getTranslations("repairOrders.form");
-  const { vehicleId } = await searchParams;
+  const { vehicleId, appointmentId } = await searchParams;
 
   const [vehicles, mechanics] = await Promise.all([listVehiclesAction(), listMechanicsAction()]);
   if (!vehicles.ok) {
@@ -63,6 +64,7 @@ export default async function NewRepairOrderPage({
           vehicles={vehicleOptions}
           mechanics={mechanicOptions}
           defaultVehicleId={vehicleId}
+          appointmentId={appointmentId}
         />
       )}
     </div>

@@ -82,7 +82,10 @@ export async function createRepairOrder(scope: Scope, input: unknown): Promise<S
     throw new ValidationError("Invalid repair order", z.flattenError(parsed.error).fieldErrors);
   }
 
-  return scoped(scope).createRepairOrder(parsed.data);
+  // `appointmentId` is a create-only link (GF-19) — passed separately so the
+  // shared write values (and the edit path) never carry it.
+  const { appointmentId, ...values } = parsed.data;
+  return scoped(scope).createRepairOrder(values, appointmentId);
 }
 
 export async function updateRepairOrder(scope: Scope, input: unknown): Promise<ScopedRepairOrder> {

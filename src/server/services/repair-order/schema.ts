@@ -55,7 +55,15 @@ const repairOrderFields = {
   diagnosis: optionalText(4000),
 };
 
-export const createRepairOrderSchema = z.object(repairOrderFields).strict();
+/**
+ * Create also accepts an optional `appointmentId` (GF-19) — the booking the car
+ * arrived for. It is create-only: the link is set once, when the order is opened
+ * from the agenda, and is deliberately absent from the edit schema so editing an
+ * order can never rewrite (or clear) it.
+ */
+export const createRepairOrderSchema = z
+  .object({ ...repairOrderFields, appointmentId: optionalId("Невалидна заявка за час.") })
+  .strict();
 export type CreateRepairOrderInput = z.infer<typeof createRepairOrderSchema>;
 
 export const updateRepairOrderSchema = z.object({ id: z.uuid(), ...repairOrderFields }).strict();

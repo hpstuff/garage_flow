@@ -35,6 +35,12 @@ type RepairOrderFormProps = {
   mechanics: MechanicOption[];
   /** Preselect a Vehicle when creating (e.g. arriving from the Vehicle detail page). */
   defaultVehicleId?: string;
+  /**
+   * Link this new order to an Appointment (GF-19) — set when the front desk opens
+   * the order from the agenda on arrival. Create-only: carried on the create call,
+   * never on edit, so it can only ever be set once.
+   */
+  appointmentId?: string;
 };
 
 /** Radix Select forbids an empty item value, so "no lead" needs a sentinel. */
@@ -49,6 +55,7 @@ export function RepairOrderForm({
   vehicles,
   mechanics,
   defaultVehicleId,
+  appointmentId,
 }: RepairOrderFormProps) {
   const t = useTranslations("repairOrders.form");
   const router = useRouter();
@@ -72,7 +79,7 @@ export function RepairOrderForm({
     const values = { vehicleId, mechanicId, complaint, diagnosis };
     const result: RepairOrderMutationResult = isEdit
       ? await updateRepairOrderAction({ id: repairOrder?.id, ...values })
-      : await createRepairOrderAction(values);
+      : await createRepairOrderAction({ ...values, appointmentId });
 
     if (result.ok) {
       router.push(`/repair-orders/${result.data.id}`);
@@ -91,6 +98,11 @@ export function RepairOrderForm({
 
   return (
     <form onSubmit={onSubmit} className="max-w-xl space-y-5">
+      {!isEdit && appointmentId ? (
+        <p className="rounded-md bg-accent px-3 py-2 text-sm text-accent-foreground">
+          {t("appointmentLinked")}
+        </p>
+      ) : null}
       <div className="space-y-1.5">
         <Label htmlFor="vehicle">{t("vehicle")}</Label>
         <Select value={vehicleId} onValueChange={setVehicleId}>

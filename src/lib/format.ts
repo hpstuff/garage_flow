@@ -41,6 +41,16 @@ export function formatDate(value: Date | string | number): string {
   return new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium" }).format(new Date(value));
 }
 
+/** Render the time-of-day only (e.g. 09:30) — used by the Appointment agenda (GF-19). */
+export function formatTime(value: Date | string | number): string {
+  return new Intl.DateTimeFormat(LOCALE, { timeStyle: "short" }).format(new Date(value));
+}
+
+/** Render a full day-and-weekday heading for the agenda (e.g. "неделя, 2 август 2026 г."). */
+export function formatDateFull(value: Date | string | number): string {
+  return new Intl.DateTimeFormat(LOCALE, { dateStyle: "full" }).format(new Date(value));
+}
+
 /**
  * Render an Invoice's gapless number as it appears on the фактура (GF-14): the
  * legal `series` and the sequential number zero-padded to ten digits, the standard
