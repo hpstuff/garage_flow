@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center gap-4 border-b px-4">
+      <header className="flex h-14 items-center gap-4 border-b px-4 print:hidden">
         <span className="shrink-0 font-semibold">{tApp("name")}</span>
         <div className="flex flex-1 justify-center">
           <VehicleSearch />
@@ -30,7 +30,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <LogoutButton />
       </header>
       <div className="flex flex-1">
-        <aside className="w-56 shrink-0 border-r p-4">
+        <aside className="w-56 shrink-0 border-r p-4 print:hidden">
           <nav className="flex flex-col gap-1">
             <Link
               href="/dashboard"
@@ -76,7 +76,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </Link>
           </nav>
         </aside>
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6 print:p-0">{children}</main>
       </div>
     </div>
   );

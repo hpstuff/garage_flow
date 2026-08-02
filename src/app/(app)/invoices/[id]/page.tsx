@@ -87,12 +87,20 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           </h1>
           <p className="text-muted-foreground">{formatDate(invoice.issuedAt)}</p>
         </div>
-        <Link
-          href={`/repair-orders/${invoice.repairOrderId}`}
-          className={buttonVariants({ variant: "outline" })}
-        >
-          {t("repairOrder")}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/invoices/${invoice.id}/document`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t("documentLink")}
+          </Link>
+          <Link
+            href={`/repair-orders/${invoice.repairOrderId}`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t("repairOrder")}
+          </Link>
+        </div>
       </div>
 
       <Card>
