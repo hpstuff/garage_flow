@@ -14,10 +14,10 @@ import type { Db } from "./client";
 import {
   type CustomerKind,
   customer,
+  type InvoiceStatus,
   invoice,
   invoiceLine,
   invoiceSeries,
-  type InvoiceStatus,
   type KanbanStage,
   type LineItemType,
   lineItem,
