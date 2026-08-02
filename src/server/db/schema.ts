@@ -36,14 +36,42 @@ export const INITIAL_KANBAN_STAGE: KanbanStage = "waiting";
 /** `delivered` is **terminal** (CONTEXT.md): an order there does not move on. */
 export const TERMINAL_KANBAN_STAGE: KanbanStage = "delivered";
 
+/**
+ * A Location's **VAT mode** (GF-12, ADR-0006). VAT is a per-Location setting: a
+ * `registered` Location charges VAT at its configured `vat_rate`; a
+ * `not_registered` one (below the registration threshold) issues invoices that
+ * carry **no VAT at all** — a *true* zero-VAT mode, not a cosmetic 0% rate. The
+ * distinction drives the Invoice/VAT math (see `computeRepairOrderTotals`).
+ */
+export const VAT_MODES = ["registered", "not_registered"] as const;
+export type VatMode = (typeof VAT_MODES)[number];
+export const vatMode = pgEnum("vat_mode", VAT_MODES);
+
+/** Standard Bulgarian VAT rate in **basis points** (20% → 2000) — the default. */
+export const DEFAULT_VAT_RATE = 2000;
+
 export const location = pgTable("location", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: text("account_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  /** VAT configuration (rates, registration number). Filled in by GF-12. */
-  vatConfig: text("vat_config"),
+  /**
+   * VAT registration mode (GF-12, ADR-0006). Defaults to `registered`: the common
+   * case for shops adopting the software, and it preserves the standard 20%-VAT
+   * фактура until an owner explicitly switches a below-threshold Location to
+   * `not_registered` in settings. Never fabricates the *opposite* error silently —
+   * onboarding surfaces the choice alongside the fiscal-device disclosure.
+   */
+  vatMode: vatMode("vat_mode").notNull().default("registered"),
+  /**
+   * The Location's default VAT rate in **basis points** (20% → 2000), applied to
+   * new Line Items when `registered`. Individual lines may still carry a reduced
+   * rate; this only seeds the form. Ignored entirely when `not_registered`.
+   */
+  vatRate: integer("vat_rate").notNull().default(DEFAULT_VAT_RATE),
+  /** ДДС registration number, shown on issued фактури; null when not registered. */
+  vatNumber: text("vat_number"),
   /**
    * Kanban Stages this Location hides on its board (GF-10). The set of stages is
    * fixed (see {@link KANBAN_STAGES}) — a Location can only *hide* the ones it
