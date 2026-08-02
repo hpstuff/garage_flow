@@ -78,6 +78,13 @@
       "when": 1785656803046,
       "tag": "0010_complex_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785675793920,
+      "tag": "0011_small_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

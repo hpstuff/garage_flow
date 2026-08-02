@@ -567,6 +567,170 @@ export const payment = pgTable("payment", {
 
 export type PaymentRow = typeof payment.$inferSelect;
 
+/**
+ * The **legal series** a Credit Note's gapless number is drawn from — its **own**
+ * series, kept separate from the Invoice's (GF-16, ADR-0002). Bulgarian VAT law
+ * numbers corrective documents sequentially; the MVP issues from a single default
+ * series per Location, modelled from day one like {@link DEFAULT_INVOICE_SERIES}.
+ * A Credit Note draws from {@link creditNoteSeries}, never from the Invoice
+ * counter, so the two document types never share or interleave numbers — a unified
+ * legal sequence across document types is a fiscalization concern, deferred by
+ * ADR-0006.
+ */
+export const DEFAULT_CREDIT_NOTE_SERIES = "A";
+
+/**
+ * The gapless-numbering counter for Credit Notes (GF-16, ADR-0002) — the exact
+ * twin of {@link invoiceSeries}, keyed by `(locationId, series)` and holding the
+ * **last** number issued in that series. Issuing a Credit Note increments it
+ * atomically (an `ON CONFLICT` upsert serialised on the unique key, inside the same
+ * transaction as the Credit Note insert), so two concurrent issues can never take
+ * the same number and a rolled-back issue releases its number rather than leaving a
+ * gap. Its own table, distinct from {@link invoiceSeries}: the Credit Note's number
+ * source must survive independently and never draw from the Invoice counter.
+ */
+export const creditNoteSeries = pgTable(
+  "credit_note_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id, { onDelete: "cascade" }),
+    /** The legal series these numbers belong to (CONTEXT.md); `A` in the MVP. */
+    series: text("series").notNull().default(DEFAULT_CREDIT_NOTE_SERIES),
+    /** The last number issued in this `(location, series)`; the next Credit Note takes `+1`. */
+    lastNumber: integer("last_number").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("credit_note_series_location_series_unique").on(t.locationId, t.series)],
+);
+
+export type CreditNoteSeriesRow = typeof creditNoteSeries.$inferSelect;
+
+/**
+ * A **Credit Note** is the corrective legal document that adjusts an already-issued
+ * Invoice — the only way to "change" one (CONTEXT.md, GF-16, ADR-0002). It
+ * **references** the Invoice it corrects (`invoiceId`) and, like the Invoice, is
+ * **frozen at issue** and **append-only**: no update or delete path in the domain,
+ * so issuing a Credit Note never edits the original Invoice, which stays immutable.
+ *
+ * `number` is the **gapless sequential number** within `series`, drawn from
+ * {@link creditNoteSeries}; the `(locationId, series, number)` unique index is the
+ * hard guarantee a number is never duplicated. `issuedAt` is the freeze time.
+ *
+ * Everything else is a **snapshot** taken at issue, copied from the credited
+ * Invoice so the corrective document is self-contained and a later change to the
+ * source can never rewrite it:
+ * - `invoiceSeries` + `invoiceNumber` — the original Invoice's printed number, so
+ *   the Credit Note reads "corrective to Invoice A-0000000001" without a join.
+ * - `vatMode` + `sellerVatNumber` — the Invoice's VAT registration as it stood.
+ * - `customerName` + `vehiclePlate` — the buyer/vehicle identity as printed.
+ * - `net` / `vat` / `gross` — the amounts credited back, in **integer minor units**
+ *   of `currency` (ADR-0011), stored as positive values (the value returned to the
+ *   Customer). `vat` is **null** when the Invoice carried no VAT (ADR-0006).
+ * - `reason` — optional free text recording *why* the correction was issued.
+ *
+ * The MVP issues a **full** Credit Note (it credits the whole Invoice), so at most
+ * one references any Invoice — the guard lives in {@link ScopedDb.issueCreditNote}.
+ * `repairOrderId` is a carry-through back-reference (the RO the Invoice came from).
+ * Scoped to a **Location** (ADR-0003), reached only through ScopedDb (ADR-0013).
+ */
+export const creditNote = pgTable(
+  "credit_note",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    locationId: uuid("location_id")
+      .notNull()
+      .references(() => location.id, { onDelete: "cascade" }),
+    /** The Invoice this Credit Note references and corrects (ADR-0002). Cascades with it. */
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoice.id, { onDelete: "cascade" }),
+    /** The Repair Order the credited Invoice was issued from (a carry-through back-reference). */
+    repairOrderId: uuid("repair_order_id")
+      .notNull()
+      .references(() => repairOrder.id, { onDelete: "cascade" }),
+    /** The Credit Note's own legal series (CONTEXT.md); pairs with {@link creditNoteSeries}. */
+    series: text("series").notNull().default(DEFAULT_CREDIT_NOTE_SERIES),
+    /** Gapless sequential number within `series` — unique per Location per series. */
+    number: integer("number").notNull(),
+    /** The freeze time — when the snapshot below became immutable. */
+    issuedAt: timestamp("issued_at").defaultNow().notNull(),
+    /** Snapshot of the credited Invoice's series, for the "corrective to …" reference. */
+    invoiceSeries: text("invoice_series").notNull(),
+    /** Snapshot of the credited Invoice's gapless number. */
+    invoiceNumber: integer("invoice_number").notNull(),
+    /** Snapshot of the Invoice's VAT mode at issue (ADR-0006). */
+    vatMode: vatMode("vat_mode").notNull(),
+    /** Snapshot of the seller's ДДС number; null when not registered. */
+    sellerVatNumber: text("seller_vat_number"),
+    /** Snapshot of the buyer's name as printed on the document. */
+    customerName: text("customer_name").notNull(),
+    /** Snapshot of the Vehicle's registration plate, when it had one. */
+    vehiclePlate: text("vehicle_plate"),
+    /** Net total credited in integer minor units (ADR-0011). */
+    net: integer("net").notNull(),
+    /** VAT total credited in minor units, or **null** when the Invoice carried no VAT (ADR-0006). */
+    vat: integer("vat"),
+    /** Gross total credited (`net + vat`, or `net` when no VAT applies) in minor units. */
+    gross: integer("gross").notNull(),
+    /** Optional free-text reason for the correction; never shown to the Customer. */
+    reason: text("reason"),
+    /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
+    currency: text("currency").notNull().default("BGN"),
+  },
+  (t) => [unique("credit_note_location_series_number_unique").on(t.locationId, t.series, t.number)],
+);
+
+export type CreditNoteRow = typeof creditNote.$inferSelect;
+
+/**
+ * One **frozen** credited row on a Credit Note (GF-16, ADR-0002) — the snapshot of
+ * an Invoice line as it stood on the corrected Invoice. A *copy*, not a reference:
+ * once frozen here nothing about it changes, and it deliberately carries **no**
+ * Mechanic attribution (that is the Work Card's, ADR-0009). The money/quantity
+ * columns keep the same exact integer encodings as {@link invoiceLine} (and
+ * {@link lineItem}). Scoped to a **Location** (ADR-0003), reached only through
+ * ScopedDb (ADR-0013).
+ */
+export const creditNoteLine = pgTable("credit_note_line", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: text("account_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => location.id, { onDelete: "cascade" }),
+  /** The Credit Note this frozen line belongs to. Cascades with the Credit Note. */
+  creditNoteId: uuid("credit_note_id")
+    .notNull()
+    .references(() => creditNote.id, { onDelete: "cascade" }),
+  /** 1-based order the line appeared on the corrected Invoice, preserved on the document. */
+  position: integer("position").notNull(),
+  type: lineItemType("type").notNull(),
+  /** What the line is, in words — copied from the Invoice line at issue. */
+  description: text("description").notNull(),
+  /** Hours (Labor) or count (Part), in thousandths — frozen (ADR-0011). */
+  quantity: integer("quantity").notNull(),
+  /** Hourly rate (Labor) or unit price (Part), in integer minor units — frozen. */
+  unitPrice: integer("unit_price").notNull(),
+  /** Per-line VAT rate in basis points (20% → 2000) — frozen. */
+  vatRate: integer("vat_rate").notNull(),
+  /** Net line total credited in minor units — frozen at the Invoice line's value. */
+  amount: integer("amount").notNull(),
+  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
+  currency: text("currency").notNull().default("BGN"),
+});
+
+export type CreditNoteLineRow = typeof creditNoteLine.$inferSelect;
+
 // Re-export the auth infrastructure tables so a single `schema` object covers
 // the whole database for the Drizzle client and drizzle-kit migrations.
 export * from "./auth-schema";
