@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
-import { buttonVariants } from "@/components/ui/button";
 import {
   formatDate,
   formatInvoiceNumber,
@@ -26,11 +25,7 @@ import { PrintButton } from "./_components/print-button";
  * generation out of scope): the toolbar and app chrome are `print:hidden`, so the
  * printout is a clean sheet. A 404 for an Invoice outside the caller's scope.
  */
-export default async function InvoiceDocumentPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations("invoices.document");
   const tType = await getTranslations("repairOrders.lineItems.types");
   const tLines = await getTranslations("invoices.lines");
