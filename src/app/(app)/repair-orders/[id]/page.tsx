@@ -5,9 +5,10 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
 import { computeRepairOrderTotals } from "@/server/services/line-item/service";
+import { getAppointmentAction } from "../../appointments/_actions/appointment-actions";
 import { getInvoiceForRepairOrderAction } from "../../invoices/_actions/invoice-actions";
 import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
 import { getVatConfigAction } from "../../settings/_actions/vat-actions";
@@ -74,6 +75,13 @@ export default async function RepairOrderDetailPage({
     order.invoiceStatus === "invoiced" ? await getInvoiceForRepairOrderAction(order.id) : null;
   const issuedInvoice = invoiceResult?.ok ? invoiceResult.data : null;
 
+  // The booking this visit arrived for (GF-19), when the order was opened from the
+  // agenda. Read-only here; links back to that day's agenda.
+  const appointmentResult = order.appointmentId
+    ? await getAppointmentAction(order.appointmentId)
+    : null;
+  const appointment = appointmentResult?.ok ? appointmentResult.data : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -135,6 +143,16 @@ export default async function RepairOrderDetailPage({
           <Detail label={t("owner")}>{order.customerName}</Detail>
           <Detail label={t("mechanic")}>{order.mechanicName ?? t("noLead")}</Detail>
           <Detail label={t("createdAt")}>{formatDate(order.createdAt)}</Detail>
+          {appointment ? (
+            <Detail label={t("appointment")}>
+              <Link
+                href={`/appointments?date=${toDayParam(appointment.startsAt)}`}
+                className="hover:underline"
+              >
+                {formatDate(appointment.startsAt)} · {formatTime(appointment.startsAt)}
+              </Link>
+            </Detail>
+          ) : null}
           <Detail label={t("complaint")} full>
             {order.complaint ?? t("empty")}
           </Detail>
@@ -153,6 +171,14 @@ export default async function RepairOrderDetailPage({
       />
     </div>
   );
+}
+
+/** A Date as a local `YYYY-MM-DD` day param — links the linked Appointment to its agenda day. */
+function toDayParam(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /** One label/value pair in the detail grid; `full` spans both columns for prose. */

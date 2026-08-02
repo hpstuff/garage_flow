@@ -126,10 +126,10 @@ export function buildAgenda(appointments: ScopedAppointment[], date: string): Da
   const conflicts = new Map<string, Set<string>>(ordered.map((a) => [a.id, new Set<string>()]));
   for (let i = 0; i < ordered.length; i += 1) {
     const a = ordered[i];
-    if (!a || a.status !== "scheduled") continue;
+    if (a?.status !== "scheduled") continue;
     for (let j = i + 1; j < ordered.length; j += 1) {
       const b = ordered[j];
-      if (!b || b.status !== "scheduled") continue;
+      if (b?.status !== "scheduled") continue;
       if (overlaps(a, b) && sharesResource(a, b)) {
         conflicts.get(a.id)?.add(b.id);
         conflicts.get(b.id)?.add(a.id);
