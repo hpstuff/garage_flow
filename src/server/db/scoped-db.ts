@@ -23,6 +23,8 @@ import {
   lineItem,
   location,
   mechanic,
+  type PaymentMethod,
+  payment,
   type PaymentStatus,
   repairOrder,
   TERMINAL_KANBAN_STAGE,
@@ -389,6 +391,45 @@ const invoiceLineColumns = {
   vatRate: invoiceLine.vatRate,
   amount: invoiceLine.amount,
   currency: invoiceLine.currency,
+} as const;
+
+/**
+ * A **Payment** recorded against an Invoice as it crosses the service boundary
+ * (GF-15). `amount` is integer minor units of `currency` (ADR-0011), copied from
+ * the Invoice at record time; `method` is descriptive only (see schema.ts).
+ */
+export interface ScopedPayment {
+  id: string;
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  note: string | null;
+  currency: string;
+  createdAt: Date;
+}
+
+/**
+ * The Payment fields a caller may set — scope-derived columns are never here, and
+ * `currency` is copied from the settled Invoice by {@link ScopedDb.recordPayment}
+ * (never trusted from the caller), so a Payment can never disagree in currency
+ * with the document it settles. `amount` is already in exact minor units (ADR-0011).
+ */
+export interface PaymentWriteValues {
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  note: string | null;
+}
+
+/** Explicit column projection — never return raw rows (ADR-0016). */
+const paymentColumns = {
+  id: payment.id,
+  invoiceId: payment.invoiceId,
+  amount: payment.amount,
+  method: payment.method,
+  note: payment.note,
+  currency: payment.currency,
+  createdAt: payment.createdAt,
 } as const;
 
 /**
@@ -1352,6 +1393,124 @@ export class ScopedDb {
         .orderBy(asc(invoiceLine.position));
 
       return { ...header, lines };
+    });
+  }
+
+  /** The scope's `{ accountId, locationId }` as a reusable Payment predicate. */
+  #paymentScope() {
+    return and(
+      eq(payment.accountId, this.scope.accountId),
+      eq(payment.locationId, this.scope.locationId),
+    );
+  }
+
+  /**
+   * The Payments recorded against an Invoice, oldest first (GF-15) — the order they
+   * were taken, which is how they read on the document. Scoped, so Payments on
+   * another Account's Invoice are invisible (an out-of-scope `invoiceId` yields none).
+   */
+  async listPayments(invoiceId: string): Promise<ScopedPayment[]> {
+    return this.#db
+      .select(paymentColumns)
+      .from(payment)
+      .where(and(eq(payment.invoiceId, invoiceId), this.#paymentScope()))
+      .orderBy(asc(payment.createdAt), asc(payment.id));
+  }
+
+  /**
+   * Record a Payment against an Invoice (GF-15, ADR-0002) — the one place a Payment
+   * is taken, atomically. In a single transaction it:
+   *
+   * 1. Locks the Invoice row (`FOR UPDATE`) within scope, 404-ing a cross-tenant
+   *    Invoice — and serialising concurrent Payments on the same Invoice, so two at
+   *    once can't both read a stale paid-so-far sum and derive the wrong status.
+   * 2. Inserts the Payment, copying the Invoice's `currency` (never the caller's), so
+   *    a Payment can never disagree in currency with the document it settles.
+   * 3. Sums **all** the Invoice's Payments (the new one included) and derives the
+   *    `payment_status` from that total versus the Invoice `gross` via `deriveStatus`
+   *    — the domain rule stays in the service (this class never owns status
+   *    semantics), applied here so the read+derive is atomic under the lock.
+   * 4. Updates the source Repair Order's `payment_status` **reference** (ADR-0002) —
+   *    it never touches the frozen Invoice snapshot, which stays immutable.
+   *
+   * Commits or rolls back together, so a failure never leaves a Payment without its
+   * matching RO status, or a status derived from a half-applied set of Payments.
+   */
+  async recordPayment(
+    values: PaymentWriteValues,
+    deriveStatus: (totalPaidMinor: number, invoiceGrossMinor: number) => PaymentStatus,
+  ): Promise<ScopedPayment> {
+    return this.#db.transaction(async (tx) => {
+      // 1. Lock the Invoice and read the fields the derivation needs, in scope.
+      const invoiceRows = await tx
+        .select({
+          id: invoice.id,
+          repairOrderId: invoice.repairOrderId,
+          gross: invoice.gross,
+          currency: invoice.currency,
+        })
+        .from(invoice)
+        .where(
+          and(
+            eq(invoice.id, values.invoiceId),
+            eq(invoice.accountId, this.scope.accountId),
+            eq(invoice.locationId, this.scope.locationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      const settled = invoiceRows[0];
+      if (!settled) {
+        throw new NotFoundError("Invoice not found");
+      }
+
+      // 2. Insert the Payment, copying the Invoice's currency (never the caller's).
+      const paymentRows = await tx
+        .insert(payment)
+        .values({
+          accountId: this.scope.accountId,
+          locationId: this.scope.locationId,
+          invoiceId: settled.id,
+          amount: values.amount,
+          method: values.method,
+          note: values.note,
+          currency: settled.currency,
+        })
+        .returning(paymentColumns);
+
+      const created = paymentRows[0];
+      if (!created) {
+        throw new ConflictError("Payment could not be recorded");
+      }
+
+      // 3. Sum every Payment on this Invoice (the new one included) and derive status.
+      const totalRows = await tx
+        .select({ totalPaid: sql<number>`coalesce(sum(${payment.amount}), 0)` })
+        .from(payment)
+        .where(
+          and(
+            eq(payment.invoiceId, settled.id),
+            eq(payment.accountId, this.scope.accountId),
+            eq(payment.locationId, this.scope.locationId),
+          ),
+        );
+      const totalPaid = Number(totalRows[0]?.totalPaid ?? 0);
+      const status = deriveStatus(totalPaid, settled.gross);
+
+      // 4. Update the RO's payment_status reference (ADR-0002) — never the Invoice.
+      await tx
+        .update(repairOrder)
+        .set({ paymentStatus: status, updatedAt: new Date() })
+        .where(
+          and(
+            eq(repairOrder.id, settled.repairOrderId),
+            eq(repairOrder.accountId, this.scope.accountId),
+            eq(repairOrder.locationId, this.scope.locationId),
+          ),
+        );
+
+      return created;
     });
   }
 }
