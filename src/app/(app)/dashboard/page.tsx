@@ -1,10 +1,17 @@
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatNumber } from "@/lib/format";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatNumber, formatShare } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { loadDashboard } from "./_actions/load-dashboard";
-import { OrdersByStageChart } from "./_components/orders-by-stage-chart";
 
 const METRIC_TINTS = {
   activeRepairOrders: "bg-tint-blue",
@@ -14,6 +21,7 @@ const METRIC_TINTS = {
 
 export default async function DashboardPage() {
   const t = await getTranslations("dashboard");
+  const tStageColumns = await getTranslations("dashboard.stageColumns");
   const tStage = await getTranslations("repairOrders.stage");
   const result = await loadDashboard();
 
@@ -31,9 +39,6 @@ export default async function DashboardPage() {
     { key: "vehicles", value: metrics.vehicles },
   ] as const;
   const totalOrders = ordersByStage.reduce((sum, { count }) => sum + count, 0);
-  const stageChartData = ordersByStage
-    .filter(({ count }) => count > 0)
-    .map(({ stage, count }) => ({ name: tStage(stage), value: count }));
 
   return (
     <div className="space-y-6">
@@ -59,7 +64,26 @@ export default async function DashboardPage() {
             <CardTitle>{t("stageChart")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <OrdersByStageChart data={stageChartData} />
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{tStageColumns("stage")}</TableHead>
+                  <TableHead className="text-right">{tStageColumns("count")}</TableHead>
+                  <TableHead className="text-right">{tStageColumns("share")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ordersByStage.map(({ stage, count }) => (
+                  <TableRow key={stage}>
+                    <TableCell className="font-medium">{tStage(stage)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(count)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {formatShare(count / totalOrders)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       ) : (
