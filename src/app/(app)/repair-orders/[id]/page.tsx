@@ -70,11 +70,12 @@ export default async function RepairOrderDetailPage({
     : { mode: "registered", rate: DEFAULT_VAT_RATE, vatNumber: null };
   const totals = computeRepairOrderTotals(lineItems, vatConfig);
 
-  // Invoicing (GF-14, ADR-0002). When the order is already invoiced, resolve the
-  // issued Invoice so the header links straight to the frozen document; otherwise
-  // it offers to issue one from the current Line Items.
+  // Invoicing (GF-14, ADR-0002). When the order already has an Invoice — still
+  // `invoiced`, or `credited` once a Credit Note voided it (GF-16) — resolve it so
+  // the header links straight to the frozen document; otherwise it offers to issue
+  // one from the current Line Items.
   const invoiceResult =
-    order.invoiceStatus === "invoiced" ? await getInvoiceForRepairOrderAction(order.id) : null;
+    order.invoiceStatus !== "not_invoiced" ? await getInvoiceForRepairOrderAction(order.id) : null;
   const issuedInvoice = invoiceResult?.ok ? invoiceResult.data : null;
 
   // The booking this visit arrived for (GF-19), when the order was opened from the
@@ -111,7 +112,7 @@ export default async function RepairOrderDetailPage({
           </p>
         </div>
         <div className="flex shrink-0 items-start gap-2">
-          {order.invoiceStatus === "invoiced" ? (
+          {order.invoiceStatus !== "not_invoiced" ? (
             issuedInvoice ? (
               <Link
                 href={`/invoices/${issuedInvoice.id}`}

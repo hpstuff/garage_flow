@@ -250,7 +250,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
               <p className="text-sm text-muted-foreground">{tPay("empty")}</p>
             )}
 
-            <RecordPaymentForm invoiceId={invoice.id} defaultAmount={defaultAmount} />
+            {creditNote ? (
+              <p className="text-sm text-muted-foreground">{tPay("credited")}</p>
+            ) : (
+              <RecordPaymentForm invoiceId={invoice.id} defaultAmount={defaultAmount} />
+            )}
           </CardContent>
         </Card>
       ) : null}

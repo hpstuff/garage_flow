@@ -70,7 +70,13 @@ export function RecordPaymentForm({
     if (result.fieldErrors) {
       setFieldErrors(result.fieldErrors);
     }
-    setFormError(result.error === "NOT_FOUND" ? t("notFound") : t("error"));
+    if (result.error === "NOT_FOUND") {
+      setFormError(t("notFound"));
+    } else if (result.error === "CONFLICT") {
+      setFormError(t("credited"));
+    } else {
+      setFormError(t("error"));
+    }
     setPending(false);
   }
 
