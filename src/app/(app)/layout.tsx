@@ -6,7 +6,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
   SidebarHeader,
   SidebarProvider,
 } from "@/components/ui/sidebar";
@@ -37,9 +36,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <span className="font-semibold">{tApp("name")}</span>
           </SidebarHeader>
           <SidebarContent>
-            <SidebarGroup>
-              <AppSidebarNav />
-            </SidebarGroup>
+            <AppSidebarNav />
           </SidebarContent>
           <SidebarFooter>
             <LogoutButton />

@@ -118,7 +118,7 @@ export function SidebarContent({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-sidebar="content"
-      className={cn("flex-1 overflow-y-auto px-2 py-3", className)}
+      className={cn("flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3", className)}
       {...props}
     />
   );

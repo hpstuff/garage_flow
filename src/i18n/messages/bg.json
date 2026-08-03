@@ -11,7 +11,11 @@
     "mechanics": "Механици",
     "board": "Канбан",
     "appointments": "Часове",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "groups": {
+      "work": "Работа",
+      "directory": "Регистри"
+    }
   },
   "search": {
     "label": "Бързо търсене на автомобил",
