@@ -19,7 +19,8 @@ import { db } from "../../db/client";
 import { customer, location, mechanic, organization, vehicle } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import type { ScopedInvoice, ScopedPayment } from "../../db/scoped-db";
-import { NotFoundError, ValidationError } from "../../domain/errors";
+import { ConflictError, NotFoundError, ValidationError } from "../../domain/errors";
+import { issueCreditNote } from "../credit-note/service";
 import { getInvoice, issueInvoice } from "../invoice/service";
 import { createLineItem } from "../line-item/service";
 import { createRepairOrder, getRepairOrder } from "../repair-order/service";
@@ -305,6 +306,21 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
       note: "нареждане",
       currency: "BGN",
     });
+  });
+
+  it("refuses a Payment once the Invoice has been credited (GF-16, ADR-0002)", async () => {
+    const s = scope(accountA, locationA);
+    const { orderId, invoice } = await invoiceOrder(accountA, locationA);
+
+    await issueCreditNote(s, { invoiceId: invoice.id });
+
+    await expect(recordPayment(s, { invoiceId: invoice.id, amount: 10 })).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+    // The RO stays exactly as the Credit Note left it — no Payment snuck through.
+    const order = await getRepairOrder(s, { id: orderId });
+    expect(order.paymentStatus).toBe("credited");
+    expect(order.invoiceStatus).toBe("credited");
   });
 
   it("never records against, or reads, an Invoice across the tenant boundary", async () => {

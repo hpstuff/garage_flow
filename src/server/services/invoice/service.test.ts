@@ -21,6 +21,7 @@ import { customer, location, mechanic, organization, vehicle } from "../../db/sc
 import { scopeFromSession } from "../../db/scope";
 import type { ScopedLineItem, ScopedRepairOrder } from "../../db/scoped-db";
 import { ConflictError, NotFoundError, ValidationError } from "../../domain/errors";
+import { issueCreditNote } from "../credit-note/service";
 import { createLineItem, deleteLineItem } from "../line-item/service";
 import { createRepairOrder, getRepairOrder } from "../repair-order/service";
 import { buildInvoiceInput, getInvoice, getInvoiceForRepairOrder, issueInvoice } from "./service";
@@ -327,6 +328,15 @@ describe.skipIf(!hasDb)("invoice service — integration (real Postgres, ADR-001
     const s = scope(accountA, locationA);
     const orderId = await seedInvoiceableOrder(accountA, locationA, vehicleA, mechanicA);
     await issueInvoice(s, { repairOrderId: orderId });
+    await expect(issueInvoice(s, { repairOrderId: orderId })).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it("refuses to issue again once the Invoice has been credited (GF-16, ADR-0002)", async () => {
+    const s = scope(accountA, locationA);
+    const orderId = await seedInvoiceableOrder(accountA, locationA, vehicleA, mechanicA);
+    const issued = await issueInvoice(s, { repairOrderId: orderId });
+    await issueCreditNote(s, { invoiceId: issued.id });
+
     await expect(issueInvoice(s, { repairOrderId: orderId })).rejects.toBeInstanceOf(ConflictError);
   });
 
