@@ -1755,8 +1755,8 @@ export class ScopedDb {
       if (!order) {
         throw new NotFoundError("Repair order not found");
       }
-      if (order.invoiceStatus === "invoiced") {
-        throw new ConflictError("Repair order is already invoiced");
+      if (order.invoiceStatus !== "not_invoiced") {
+        throw new ConflictError("Repair order already has an Invoice");
       }
 
       // 2. Allocate the next gapless number for this (location, series).
@@ -1879,13 +1879,16 @@ export class ScopedDb {
    * 1. Locks the Invoice row (`FOR UPDATE`) within scope, 404-ing a cross-tenant
    *    Invoice — and serialising concurrent Payments on the same Invoice, so two at
    *    once can't both read a stale paid-so-far sum and derive the wrong status.
-   * 2. Inserts the Payment, copying the Invoice's `currency` (never the caller's), so
+   * 2. Refuses once a Credit Note has voided the Invoice (GF-16, ADR-0002) — a
+   *    `ConflictError`, checked under the same lock, so a concurrent credit-note
+   *    issue can't race a Payment through.
+   * 3. Inserts the Payment, copying the Invoice's `currency` (never the caller's), so
    *    a Payment can never disagree in currency with the document it settles.
-   * 3. Sums **all** the Invoice's Payments (the new one included) and derives the
+   * 4. Sums **all** the Invoice's Payments (the new one included) and derives the
    *    `payment_status` from that total versus the Invoice `gross` via `deriveStatus`
    *    — the domain rule stays in the service (this class never owns status
    *    semantics), applied here so the read+derive is atomic under the lock.
-   * 4. Updates the source Repair Order's `payment_status` **reference** (ADR-0002) —
+   * 5. Updates the source Repair Order's `payment_status` **reference** (ADR-0002) —
    *    it never touches the frozen Invoice snapshot, which stays immutable.
    *
    * Commits or rolls back together, so a failure never leaves a Payment without its
@@ -1920,7 +1923,25 @@ export class ScopedDb {
         throw new NotFoundError("Invoice not found");
       }
 
-      // 2. Insert the Payment, copying the Invoice's currency (never the caller's).
+      // 2. Refuse once the Invoice has been voided by a Credit Note (GF-16,
+      // ADR-0002) — a credited Invoice takes no further Payments, checked under
+      // the same lock so a concurrent credit-note issue can't race a Payment.
+      const creditNoteRows = await tx
+        .select({ id: creditNote.id })
+        .from(creditNote)
+        .where(
+          and(
+            eq(creditNote.invoiceId, settled.id),
+            eq(creditNote.accountId, this.scope.accountId),
+            eq(creditNote.locationId, this.scope.locationId),
+          ),
+        )
+        .limit(1);
+      if (creditNoteRows[0]) {
+        throw new ConflictError("Invoice has been credited — no further Payments can be recorded");
+      }
+
+      // 3. Insert the Payment, copying the Invoice's currency (never the caller's).
       const paymentRows = await tx
         .insert(payment)
         .values({
@@ -1939,7 +1960,7 @@ export class ScopedDb {
         throw new ConflictError("Payment could not be recorded");
       }
 
-      // 3. Sum every Payment on this Invoice (the new one included) and derive status.
+      // 4. Sum every Payment on this Invoice (the new one included) and derive status.
       const totalRows = await tx
         .select({ totalPaid: sql<number>`coalesce(sum(${payment.amount}), 0)` })
         .from(payment)
@@ -1953,7 +1974,7 @@ export class ScopedDb {
       const totalPaid = Number(totalRows[0]?.totalPaid ?? 0);
       const status = deriveStatus(totalPaid, settled.gross);
 
-      // 4. Update the RO's payment_status reference (ADR-0002) — never the Invoice.
+      // 5. Update the RO's payment_status reference (ADR-0002) — never the Invoice.
       await tx
         .update(repairOrder)
         .set({ paymentStatus: status, updatedAt: new Date() })
@@ -2046,11 +2067,14 @@ export class ScopedDb {
    *    `ON CONFLICT` upsert on {@link creditNoteSeries} — serialised on the unique
    *    key, so numbers are unique and sequential; a rollback releases the number.
    * 4. Inserts the frozen header and its frozen lines (the caller's snapshot).
+   * 5. Flips the RO's `invoiceStatus`/`paymentStatus` references to `credited` — so
+   *    a voided Invoice is never left showing as still `invoiced`/`paid` on the RO
+   *    list/board, and so {@link recordPayment}'s own guard has a state to check.
    *
-   * It deliberately touches neither the Invoice nor the Repair Order — a Credit Note
-   * is a pure append, so the original Invoice remains immutable (the load-bearing
-   * ADR-0002 rule). Commits or rolls back together, so a failure never leaves a
-   * consumed number or a half-written Credit Note.
+   * It deliberately never touches the Invoice itself — a Credit Note is a pure
+   * append, so the original Invoice remains immutable (the load-bearing ADR-0002
+   * rule). Commits or rolls back together, so a failure never leaves a consumed
+   * number, a half-written Credit Note, or an RO status out of step with it.
    */
   async issueCreditNote(values: CreditNoteIssueValues): Promise<ScopedCreditNote> {
     return this.#db.transaction(async (tx) => {
@@ -2168,6 +2192,19 @@ export class ScopedDb {
           ),
         )
         .orderBy(asc(creditNoteLine.position));
+
+      // 5. Flip the RO's invoice/payment status references (ADR-0002) — never the
+      // Invoice above.
+      await tx
+        .update(repairOrder)
+        .set({ invoiceStatus: "credited", paymentStatus: "credited", updatedAt: new Date() })
+        .where(
+          and(
+            eq(repairOrder.id, values.repairOrderId),
+            eq(repairOrder.accountId, this.scope.accountId),
+            eq(repairOrder.locationId, this.scope.locationId),
+          ),
+        );
 
       return { ...header, lines };
     });

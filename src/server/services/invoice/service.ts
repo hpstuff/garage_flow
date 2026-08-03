@@ -90,9 +90,11 @@ export function buildInvoiceInput(params: {
  * and hands the frozen snapshot to the transactional {@link ScopedDb.issueInvoice},
  * which allocates the gapless number and flips the RO's `invoice_status`.
  *
- * Two guards raise `ConflictError`: an order that is already invoiced (re-checked
- * authoritatively under the row lock in ScopedDb), and one with no Line Items — an
- * invoice with nothing on it is legally meaningless.
+ * Two guards raise `ConflictError`: an order that already has an Invoice — still
+ * `invoiced`, or `credited` once a Credit Note has voided it (GF-16); either way
+ * the MVP allows only one Invoice per RO — re-checked authoritatively under the
+ * row lock in ScopedDb — and one with no Line Items — an invoice with nothing on
+ * it is legally meaningless.
  */
 export async function issueInvoice(scope: Scope, input: unknown): Promise<ScopedInvoice> {
   const parsed = issueInvoiceSchema.safeParse(input);
@@ -102,8 +104,8 @@ export async function issueInvoice(scope: Scope, input: unknown): Promise<Scoped
 
   const db = scoped(scope);
   const order = await db.getRepairOrder(parsed.data.repairOrderId);
-  if (order.invoiceStatus === "invoiced") {
-    throw new ConflictError("Repair order is already invoiced");
+  if (order.invoiceStatus !== "not_invoiced") {
+    throw new ConflictError("Repair order already has an Invoice");
   }
 
   const lines = await db.listLineItems(order.id);
