@@ -70,7 +70,7 @@ export function SidebarProvider({
 /* ------------------------------------------------------------------ */
 
 const sidebarVariants = cva(
-  "flex h-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out",
+  "flex min-h-screen flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out",
   {
     variants: {
       variant: {
