@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AppBreadcrumb } from "./_components/app-breadcrumb";
 import { AppSidebarNav } from "./_components/app-sidebar-nav";
+import { BreadcrumbProvider } from "./_components/breadcrumb-context";
 import { LogoutButton } from "./_components/logout-button";
 import { VehicleSearch } from "./_components/vehicle-search";
 
@@ -29,29 +30,31 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const tApp = await getTranslations("app");
 
   return (
-    <SidebarProvider>
-      <Sidebar className="print:hidden">
-        <SidebarHeader>
-          <span className="font-semibold">{tApp("name")}</span>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <AppSidebarNav />
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter>
-          <LogoutButton />
-        </SidebarFooter>
-      </Sidebar>
-      <div className="flex min-h-screen flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b px-4 print:hidden">
-          <AppBreadcrumb />
-          <div className="flex flex-1 justify-center">
-            <VehicleSearch />
-          </div>
-        </header>
-        <main className="flex-1 p-6 print:p-0">{children}</main>
-      </div>
-    </SidebarProvider>
+    <BreadcrumbProvider>
+      <SidebarProvider>
+        <Sidebar className="print:hidden">
+          <SidebarHeader>
+            <span className="font-semibold">{tApp("name")}</span>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <AppSidebarNav />
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <LogoutButton />
+          </SidebarFooter>
+        </Sidebar>
+        <div className="flex min-h-screen flex-1 flex-col">
+          <header className="flex h-14 shrink-0 items-center gap-4 border-b px-4 print:hidden">
+            <AppBreadcrumb />
+            <div className="flex flex-1 justify-center">
+              <VehicleSearch />
+            </div>
+          </header>
+          <main className="flex-1 p-6 print:p-0">{children}</main>
+        </div>
+      </SidebarProvider>
+    </BreadcrumbProvider>
   );
 }

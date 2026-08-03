@@ -19,6 +19,7 @@ import {
   formatQuantity,
   formatVatRate,
 } from "@/lib/format";
+import { SetBreadcrumb } from "../../_components/set-breadcrumb";
 import { getCreditNoteAction } from "../../invoices/_actions/credit-note-actions";
 
 /**
@@ -45,20 +46,16 @@ export default async function CreditNotePage({ params }: { params: Promise<{ id:
   const note = result.data;
   const registered = note.vatMode === "registered";
   const invoiceNumber = formatInvoiceNumber(note.invoiceSeries, note.invoiceNumber);
+  const title = t("title", { number: formatInvoiceNumber(note.series, note.number) });
 
   return (
     <div className="space-y-6">
+      <SetBreadcrumb
+        segments={[{ label: invoiceNumber, href: `/invoices/${note.invoiceId}` }, { label: title }]}
+      />
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link
-            href={`/invoices/${note.invoiceId}`}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← {t("back")}
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("title", { number: formatInvoiceNumber(note.series, note.number) })}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-muted-foreground">
             {t("correctiveTo", { number: invoiceNumber })} · {formatDate(note.issuedAt)}
           </p>

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import { SetBreadcrumb } from "../../../_components/set-breadcrumb";
 import {
   invoiceStatusVariant,
   paymentStatusVariant,
@@ -21,6 +22,7 @@ import { getServiceHistoryAction } from "../../_actions/service-history-actions"
 export default async function VehicleHistoryPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations("vehicles.history");
   const tRO = await getTranslations("repairOrders");
+  const tNav = await getTranslations("nav");
   const { id } = await params;
 
   const result = await getServiceHistoryAction(id);
@@ -37,14 +39,15 @@ export default async function VehicleHistoryPage({ params }: { params: Promise<{
 
   return (
     <div className="space-y-6">
+      <SetBreadcrumb
+        segments={[
+          { label: tNav("vehicles"), href: "/vehicles" },
+          { label: vehicleKey, href: `/vehicles/${history.vehicleId}` },
+          { label: t("title") },
+        ]}
+      />
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link
-            href={`/vehicles/${history.vehicleId}`}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← {t("back")}
-          </Link>
           <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-muted-foreground">
             {[vehicleKey, description, history.customerName].filter(Boolean).join(" · ")}
