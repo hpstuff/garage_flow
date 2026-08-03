@@ -1,8 +1,17 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { getScope } from "@/app/lib/session";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+import { AppBreadcrumb } from "./_components/app-breadcrumb";
+import { AppSidebarNav } from "./_components/app-sidebar-nav";
 import { LogoutButton } from "./_components/logout-button";
 import { VehicleSearch } from "./_components/vehicle-search";
 
@@ -18,72 +27,31 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const tApp = await getTranslations("app");
-  const tNav = await getTranslations("nav");
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex h-14 items-center gap-4 border-b px-4 print:hidden">
-        <span className="shrink-0 font-semibold">{tApp("name")}</span>
-        <div className="flex flex-1 justify-center">
-          <VehicleSearch />
-        </div>
-        <LogoutButton />
-      </header>
-      <div className="flex flex-1">
-        <aside className="w-56 shrink-0 border-r p-4 print:hidden">
-          <nav className="flex flex-col gap-1">
-            <Link
-              href="/dashboard"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("dashboard")}
-            </Link>
-            <Link
-              href="/customers"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("customers")}
-            </Link>
-            <Link
-              href="/vehicles"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("vehicles")}
-            </Link>
-            <Link
-              href="/repair-orders"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("repairOrders")}
-            </Link>
-            <Link
-              href="/repair-orders/board"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("board")}
-            </Link>
-            <Link
-              href="/appointments"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("appointments")}
-            </Link>
-            <Link
-              href="/mechanics"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("mechanics")}
-            </Link>
-            <Link
-              href="/settings"
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-            >
-              {tNav("settings")}
-            </Link>
-          </nav>
-        </aside>
+    <SidebarProvider>
+      <Sidebar className="print:hidden">
+        <SidebarHeader>
+          <span className="font-semibold">{tApp("name")}</span>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <AppSidebarNav />
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <LogoutButton />
+        </SidebarFooter>
+      </Sidebar>
+      <div className="flex min-h-screen flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-4 border-b px-4 print:hidden">
+          <AppBreadcrumb />
+          <div className="flex flex-1 justify-center">
+            <VehicleSearch />
+          </div>
+        </header>
         <main className="flex-1 p-6 print:p-0">{children}</main>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
