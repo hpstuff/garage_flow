@@ -20,6 +20,7 @@ import {
   formatQuantity,
   formatVatRate,
 } from "@/lib/format";
+import { SetBreadcrumb } from "../../_components/set-breadcrumb";
 import { paymentStatusVariant } from "../../repair-orders/_components/status";
 import { getCreditNoteForInvoiceAction } from "../_actions/credit-note-actions";
 import { getInvoiceAction } from "../_actions/invoice-actions";
@@ -42,6 +43,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   const tMethod = await getTranslations("invoices.payments.methods");
   const tPaymentStatus = await getTranslations("repairOrders.paymentStatus");
   const tCredit = await getTranslations("invoices.creditNote");
+  const tNav = await getTranslations("nav");
   const { id } = await params;
 
   const result = await getInvoiceAction(id);
@@ -54,6 +56,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   const invoice = result.data;
   const registered = invoice.vatMode === "registered";
+  const title = t("title", { number: formatInvoiceNumber(invoice.series, invoice.number) });
 
   // Payments (GF-15, ADR-0002). Recorded against the Invoice and summing toward its
   // gross; the derived status is a reference on the RO, never a change to this frozen
@@ -74,17 +77,19 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-6">
+      <SetBreadcrumb
+        segments={[
+          { label: tNav("repairOrders"), href: "/repair-orders" },
+          {
+            label: invoice.vehiclePlate ?? t("empty"),
+            href: `/repair-orders/${invoice.repairOrderId}`,
+          },
+          { label: title },
+        ]}
+      />
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link
-            href={`/repair-orders/${invoice.repairOrderId}`}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← {t("back")}
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("title", { number: formatInvoiceNumber(invoice.series, invoice.number) })}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-muted-foreground">{formatDate(invoice.issuedAt)}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

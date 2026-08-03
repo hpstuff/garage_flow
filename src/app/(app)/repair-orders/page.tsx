@@ -63,52 +63,48 @@ export default async function RepairOrdersPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.vehicle")}</TableHead>
-                <TableHead>{t("columns.owner")}</TableHead>
-                <TableHead>{t("columns.mechanic")}</TableHead>
-                <TableHead>{t("columns.stage")}</TableHead>
-                <TableHead>{t("columns.invoice")}</TableHead>
-                <TableHead>{t("columns.payment")}</TableHead>
-                <TableHead>{t("columns.createdAt")}</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.vehicle")}</TableHead>
+              <TableHead>{t("columns.owner")}</TableHead>
+              <TableHead>{t("columns.mechanic")}</TableHead>
+              <TableHead>{t("columns.stage")}</TableHead>
+              <TableHead>{t("columns.invoice")}</TableHead>
+              <TableHead>{t("columns.payment")}</TableHead>
+              <TableHead>{t("columns.createdAt")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {orders.map((order) => (
+              <TableRow key={order.id}>
+                <TableCell className="font-medium">
+                  <Link href={`/repair-orders/${order.id}`} className="hover:underline">
+                    {vehicleTitle(order)}
+                  </Link>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{order.customerName}</TableCell>
+                <TableCell className="text-muted-foreground">{order.mechanicName ?? "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={stageBadgeVariant[order.stage]}>{tStage(order.stage)}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={invoiceStatusVariant[order.invoiceStatus]}>
+                    {t(`invoiceStatus.${order.invoiceStatus}`)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={paymentStatusVariant[order.paymentStatus]}>
+                    {t(`paymentStatus.${order.paymentStatus}`)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(order.createdAt)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell className="font-medium">
-                    <Link href={`/repair-orders/${order.id}`} className="hover:underline">
-                      {vehicleTitle(order)}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{order.customerName}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {order.mechanicName ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={stageBadgeVariant[order.stage]}>{tStage(order.stage)}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={invoiceStatusVariant[order.invoiceStatus]}>
-                      {t(`invoiceStatus.${order.invoiceStatus}`)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={paymentStatusVariant[order.paymentStatus]}>
-                      {t(`paymentStatus.${order.paymentStatus}`)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(order.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

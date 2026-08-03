@@ -1,3 +1,5 @@
+"use client";
+
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeft } from "lucide-react";
@@ -68,7 +70,7 @@ export function SidebarProvider({
 /* ------------------------------------------------------------------ */
 
 const sidebarVariants = cva(
-  "flex h-full flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out",
+  "flex min-h-screen flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out",
   {
     variants: {
       variant: {
@@ -116,7 +118,7 @@ export function SidebarContent({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-sidebar="content"
-      className={cn("flex-1 overflow-y-auto px-2 py-3", className)}
+      className={cn("flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3", className)}
       {...props}
     />
   );

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
+import { SetBreadcrumb } from "../../_components/set-breadcrumb";
 import { listRepairOrdersAction } from "../../repair-orders/_actions/repair-order-actions";
 import { invoiceStatusVariant, paymentStatusVariant } from "../../repair-orders/_components/status";
 import { getVehicleAction } from "../_actions/vehicle-actions";
@@ -20,6 +21,7 @@ import { getVehicleAction } from "../_actions/vehicle-actions";
 export default async function VehicleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations("vehicles.detail");
   const tKind = await getTranslations("vehicles.kind");
+  const tNav = await getTranslations("nav");
   const { id } = await params;
 
   const result = await getVehicleAction(id);
@@ -40,11 +42,11 @@ export default async function VehicleDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
+      <SetBreadcrumb
+        segments={[{ label: tNav("vehicles"), href: "/vehicles" }, { label: title }]}
+      />
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link href="/vehicles" className="text-sm text-muted-foreground hover:underline">
-            ← {t("back")}
-          </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             <Badge variant={vehicle.kind === "motorcycle" ? "info" : "secondary"}>

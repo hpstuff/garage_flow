@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatQuantity } from "@/lib/format";
+import { SetBreadcrumb } from "../../../_components/set-breadcrumb";
 import { getWorkCardAction } from "../../_actions/work-card-actions";
 import { stageBadgeVariant } from "../../_components/stages";
 
@@ -22,6 +21,7 @@ import { stageBadgeVariant } from "../../_components/stages";
 export default async function WorkCardPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations("repairOrders.workCard");
   const tStatus = await getTranslations("repairOrders");
+  const tNav = await getTranslations("nav");
   const { id } = await params;
 
   const result = await getWorkCardAction(id);
@@ -38,28 +38,21 @@ export default async function WorkCardPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="space-y-1">
-          <Link
-            href={`/repair-orders/${card.repairOrderId}`}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← {t("back")}
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-            <Badge variant={stageBadgeVariant[card.stage]}>{tStatus(`stage.${card.stage}`)}</Badge>
-          </div>
-          <p className="text-muted-foreground">
-            {[vehicleTitle, vehicleDescription, card.customerName].filter(Boolean).join(" · ")}
-          </p>
+      <SetBreadcrumb
+        segments={[
+          { label: tNav("repairOrders"), href: "/repair-orders" },
+          { label: vehicleTitle, href: `/repair-orders/${card.repairOrderId}` },
+          { label: t("title") },
+        ]}
+      />
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+          <Badge variant={stageBadgeVariant[card.stage]}>{tStatus(`stage.${card.stage}`)}</Badge>
         </div>
-        <Link
-          href={`/repair-orders/${card.repairOrderId}`}
-          className={buttonVariants({ variant: "outline" })}
-        >
-          {t("back")}
-        </Link>
+        <p className="text-muted-foreground">
+          {[vehicleTitle, vehicleDescription, card.customerName].filter(Boolean).join(" · ")}
+        </p>
       </div>
 
       <Card>

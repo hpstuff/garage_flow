@@ -28,7 +28,7 @@ Components must reference the **mapped Tailwind utilities** (`bg-background`,
 
 | SnowUI (Figma)            | CSS var (`:root`)        | Utility                       | Light        |
 | ------------------------- | ------------------------ | ----------------------------- | ------------ |
-| Background/2 `#f9f9fa`     | `--background`           | `bg-background`               | off-white    |
+| Background/2 `#f9f9fa`\*    | `--background`           | `bg-background`               | white        |
 | Black/100                 | `--foreground`           | `text-foreground`             | near-black   |
 | Background/1 `#ffffff`     | `--card` / `--popover`   | `bg-card` / `bg-popover`      | white        |
 | Primary (SnowUI-Light)    | `--primary`              | `bg-primary`                  | near-black   |
@@ -39,6 +39,14 @@ Components must reference the **mapped Tailwind utilities** (`bg-background`,
 
 Dark mode redefines each of these in `.dark`; primary becomes SnowUI's lavender.
 `--sidebar-*` mirrors the same roles for the navigation surface.
+
+\* `--background` deviates from the literal Figma value: SnowUI's off-white
+`#f9f9fa` sits only 1% of lightness from `--secondary`/`--muted` (`#f5f5f5`),
+so a filled surface on the page — the search pill, most visibly — read as
+indistinguishable from the page itself. `--background` is plain white instead,
+giving `bg-muted`/`bg-secondary` real contrast to sit on. `--card`/`--popover`/
+`--sidebar` are also white, so a `Card`'s `border` (not a background shift) is
+what separates it from the page now.
 
 **Radius:** `--radius: 0.5rem` (SnowUI Radius/8). Utilities: `rounded-sm` 4px,
 `rounded-md` 6px, `rounded-lg` 8px (controls), `rounded-xl` 12px, `rounded-2xl` 16px
@@ -53,6 +61,7 @@ Dark mode redefines each of these in `.dark`; primary becomes SnowUI's lavender.
 | `accent-blue`       | `#7dbbff`  | chart / tag, `Badge info`    |
 | `accent-purple`     | `#b899eb`  | chart / tag, `Badge accent`  |
 | `accent-green`      | `#71dd8c`  | chart / tag, `Badge success` |
+| `accent-orange`     | `#ffb55b`  | chart / tag, `Badge warning` |
 | `tint-blue`         | `#e6f1fd`  | subtle selected/hover fill   |
 | `tint-lavender`     | `#edeefc`  | subtle selected/hover fill   |
 | `chart-1..5`        | pastels    | data-viz series aliases      |

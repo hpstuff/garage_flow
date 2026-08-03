@@ -1,5 +1,6 @@
 "use client";
 
+import { Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
@@ -108,6 +109,13 @@ export function VehicleSearch() {
     router.push(`/vehicles/${vehicle.id}`);
   }
 
+  function clearQuery() {
+    setQuery("");
+    setResults([]);
+    setOpen(false);
+    inputRef.current?.focus();
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       setOpen(false);
@@ -135,9 +143,10 @@ export function VehicleSearch() {
 
   return (
     <div ref={containerRef} className="relative w-full max-w-md">
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         ref={inputRef}
-        type="search"
+        type="text"
         role="combobox"
         aria-expanded={showPanel}
         aria-controls={listId}
@@ -153,7 +162,25 @@ export function VehicleSearch() {
             setOpen(true);
           }
         }}
+        className="border-transparent bg-muted pl-9 pr-9 focus-visible:border-input focus-visible:bg-card"
       />
+      {query ? (
+        <button
+          type="button"
+          onClick={clearQuery}
+          aria-label={t("clear")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
+      ) : (
+        <kbd
+          title={t("shortcutHint")}
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border bg-card px-1.5 font-mono text-xs text-muted-foreground"
+        >
+          /
+        </kbd>
+      )}
 
       {showPanel ? (
         <div

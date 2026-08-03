@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import type { ReactNode } from "react";
@@ -9,6 +8,7 @@ import {
   formatQuantity,
   formatVatRate,
 } from "@/lib/format";
+import { SetBreadcrumb } from "../../../_components/set-breadcrumb";
 import { getInvoiceAction } from "../../_actions/invoice-actions";
 import { PrintButton } from "./_components/print-button";
 
@@ -27,6 +27,8 @@ import { PrintButton } from "./_components/print-button";
  */
 export default async function InvoiceDocumentPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations("invoices.document");
+  const tInvoices = await getTranslations("invoices");
+  const tNav = await getTranslations("nav");
   const tType = await getTranslations("repairOrders.lineItems.types");
   const tLines = await getTranslations("invoices.lines");
   const { id } = await params;
@@ -45,14 +47,22 @@ export default async function InvoiceDocumentPage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <SetBreadcrumb
+        segments={[
+          { label: tNav("repairOrders"), href: "/repair-orders" },
+          {
+            label: invoice.vehiclePlate ?? tInvoices("empty"),
+            href: `/repair-orders/${invoice.repairOrderId}`,
+          },
+          {
+            label: tInvoices("title", { number }),
+            href: `/invoices/${invoice.id}`,
+          },
+          { label: t("crumb") },
+        ]}
+      />
       {/* Toolbar — never part of the printed фактура. */}
-      <div className="flex items-center justify-between gap-4 print:hidden">
-        <Link
-          href={`/invoices/${invoice.id}`}
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← {t("back")}
-        </Link>
+      <div className="flex items-center justify-end gap-4 print:hidden">
         <PrintButton label={t("print")} />
       </div>
 

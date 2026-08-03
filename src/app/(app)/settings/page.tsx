@@ -41,7 +41,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-amber-500/40 bg-amber-500/5">
+      <Card className="border-accent-orange/40 bg-accent-orange/5">
         <CardHeader>
           <CardTitle>{t("fiscal.title")}</CardTitle>
         </CardHeader>

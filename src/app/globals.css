@@ -23,7 +23,7 @@
 :root {
   --radius: 0.5rem; /* SnowUI Radius/8 = 8px */
 
-  --background: oklch(0.98 0 0); /* Background/2 #f9f9fa — page */
+  --background: oklch(1 0 0); /* white — page (Background/2 #f9f9fa was 1% off --muted, making filled surfaces like the search pill disappear into it) */
   --foreground: oklch(0.21 0 0); /* Black/100 — primary text */
 
   --card: oklch(1 0 0); /* Background/1 #ffffff — surfaces */
@@ -141,6 +141,7 @@
   --color-accent-blue: #7dbbff;
   --color-accent-purple: #b899eb;
   --color-accent-green: #71dd8c;
+  --color-accent-orange: #ffb55b;
   --color-tint-blue: #e6f1fd; /* SnowUI Color 1 */
   --color-tint-lavender: #edeefc; /* SnowUI Color 2 */
 

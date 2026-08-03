@@ -4,7 +4,6 @@ import { getTranslations } from "next-intl/server";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { ListSearchForm } from "../_components/list-search-form";
 import { listVehiclesAction } from "./_actions/vehicle-actions";
 
 /**
@@ -43,28 +43,22 @@ export default async function VehiclesPage({
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-muted-foreground">{t("subtitle")}</p>
+      </div>
+
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-muted-foreground">{t("subtitle")}</p>
-        </div>
         <Link href="/vehicles/new" className={buttonVariants()}>
           {t("new")}
         </Link>
-      </div>
-
-      <form className="flex max-w-md gap-2">
-        <Input
-          type="search"
-          name="search"
+        <ListSearchForm
           defaultValue={search ?? ""}
           placeholder={t("search")}
-          aria-label={t("search")}
+          label={t("search")}
+          submitLabel={t("searchAction")}
         />
-        <button type="submit" className={buttonVariants({ variant: "outline" })}>
-          {t("searchAction")}
-        </button>
-      </form>
+      </div>
 
       {vehicles.length === 0 ? (
         <Card>
@@ -74,54 +68,52 @@ export default async function VehiclesPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.plate")}</TableHead>
-                <TableHead>{t("columns.vehicle")}</TableHead>
-                <TableHead>{t("columns.kind")}</TableHead>
-                <TableHead>{t("columns.owner")}</TableHead>
-                <TableHead>{t("columns.createdAt")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vehicles.map((vehicle) => {
-                const description = [vehicle.make, vehicle.model, vehicle.year]
-                  .filter(Boolean)
-                  .join(" ");
-                return (
-                  <TableRow key={vehicle.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/vehicles/${vehicle.id}`} className="hover:underline">
-                        {vehicle.plate ?? vehicle.vin ?? "—"}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{description || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={vehicle.kind === "motorcycle" ? "info" : "secondary"}>
-                        {tKind(vehicle.kind)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{vehicle.customerName}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(vehicle.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        href={`/vehicles/${vehicle.id}/edit`}
-                        className={buttonVariants({ variant: "ghost", size: "sm" })}
-                      >
-                        {t("edit")}
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.plate")}</TableHead>
+              <TableHead>{t("columns.vehicle")}</TableHead>
+              <TableHead>{t("columns.kind")}</TableHead>
+              <TableHead>{t("columns.owner")}</TableHead>
+              <TableHead>{t("columns.createdAt")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {vehicles.map((vehicle) => {
+              const description = [vehicle.make, vehicle.model, vehicle.year]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <TableRow key={vehicle.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/vehicles/${vehicle.id}`} className="hover:underline">
+                      {vehicle.plate ?? vehicle.vin ?? "—"}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{description || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={vehicle.kind === "motorcycle" ? "info" : "secondary"}>
+                      {tKind(vehicle.kind)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{vehicle.customerName}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(vehicle.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/vehicles/${vehicle.id}/edit`}
+                      className={buttonVariants({ variant: "ghost", size: "sm" })}
+                    >
+                      {t("edit")}
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

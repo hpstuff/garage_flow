@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, formatTime } from "@/lib/format";
 import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
 import { computeRepairOrderTotals } from "@/server/services/line-item/service";
+import { SetBreadcrumb } from "../../_components/set-breadcrumb";
 import { getAppointmentAction } from "../../appointments/_actions/appointment-actions";
 import { getInvoiceForRepairOrderAction } from "../../invoices/_actions/invoice-actions";
 import { listMechanicsAction } from "../../mechanics/_actions/mechanic-actions";
@@ -33,6 +34,7 @@ export default async function RepairOrderDetailPage({
 }) {
   const t = await getTranslations("repairOrders.detail");
   const tStatus = await getTranslations("repairOrders");
+  const tNav = await getTranslations("nav");
   const { id } = await params;
 
   const result = await getRepairOrderAction(id);
@@ -84,11 +86,14 @@ export default async function RepairOrderDetailPage({
 
   return (
     <div className="space-y-6">
+      <SetBreadcrumb
+        segments={[
+          { label: tNav("repairOrders"), href: "/repair-orders" },
+          { label: vehicleTitle },
+        ]}
+      />
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <Link href="/repair-orders" className="text-sm text-muted-foreground hover:underline">
-            ← {t("back")}
-          </Link>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">{vehicleTitle}</h1>
             <Badge variant={stageBadgeVariant[order.stage]}>

@@ -29,6 +29,13 @@ export function formatQuantity(thousandths: number): string {
   return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 3 }).format(thousandths / 1000);
 }
 
+/** Render a 0..1 ratio as a whole-number percent (0.42 → "42 %"). */
+export function formatShare(ratio: number): string {
+  return new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 0 }).format(
+    ratio,
+  );
+}
+
 /** Render a VAT rate stored in basis points (2000 → "20 %"). */
 export function formatVatRate(basisPoints: number): string {
   return new Intl.NumberFormat(LOCALE, {
