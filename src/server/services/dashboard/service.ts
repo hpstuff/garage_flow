@@ -10,21 +10,19 @@
 
 import { z } from "zod";
 import { type Scope, scoped } from "../../db";
+import { KANBAN_STAGES, type KanbanStage, TERMINAL_KANBAN_STAGE } from "../../db/schema";
 import { ValidationError } from "../../domain/errors";
 import { dashboardQuerySchema } from "./schema";
 
 export interface DashboardData {
   location: { id: string; name: string };
-  /**
-   * The current operational snapshot. Empty in the walking skeleton — there are
-   * no operational tables yet. Later slices compute these from scoped Repair
-   * Order / Customer / Vehicle queries.
-   */
   metrics: {
     activeRepairOrders: number;
     customers: number;
     vehicles: number;
   };
+  /** Repair Order count per Kanban stage (GF-10), in the fixed stage order. */
+  ordersByStage: { stage: KanbanStage; count: number }[];
 }
 
 export async function getDashboard(scope: Scope, input: unknown): Promise<DashboardData> {
@@ -33,14 +31,25 @@ export async function getDashboard(scope: Scope, input: unknown): Promise<Dashbo
     throw new ValidationError("Invalid dashboard query", z.flattenError(parsed.error).fieldErrors);
   }
 
-  const location = await scoped(scope).currentLocation();
+  const db = scoped(scope);
+  const [location, customers, vehicles, repairOrders] = await Promise.all([
+    db.currentLocation(),
+    db.listCustomers(null),
+    db.listVehicles({ search: null, customerId: null }),
+    db.listRepairOrders({ vehicleId: null }),
+  ]);
 
   return {
     location,
     metrics: {
-      activeRepairOrders: 0,
-      customers: 0,
-      vehicles: 0,
+      activeRepairOrders: repairOrders.filter((order) => order.stage !== TERMINAL_KANBAN_STAGE)
+        .length,
+      customers: customers.length,
+      vehicles: vehicles.length,
     },
+    ordersByStage: KANBAN_STAGES.map((stage) => ({
+      stage,
+      count: repairOrders.filter((order) => order.stage === stage).length,
+    })),
   };
 }
