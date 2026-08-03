@@ -18,6 +18,8 @@ import { scoped } from "../../db";
 import { db } from "../../db/client";
 import {
   ANONYMIZED_CUSTOMER_NAME,
+  appointment,
+  consent,
   customer,
   invoice,
   location,
@@ -27,6 +29,8 @@ import {
 } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { NotFoundError, ValidationError } from "../../domain/errors";
+import { createAppointment, getAppointment } from "../appointment/service";
+import { grantConsent } from "../consent/service";
 import { listVehicles } from "../vehicle/service";
 import {
   anonymizeCustomer,
@@ -410,6 +414,59 @@ describe.skipIf(!hasDb)("customer anonymization — integration (real Postgres, 
     const second = await anonymizeCustomer(scope(accountA, locationA), { id: owner.id });
     expect(second.anonymizedAt).toBeInstanceOf(Date);
     expect(second.anonymizedAt?.getTime()).toBe(first.anonymizedAt?.getTime());
+  });
+
+  it("unlinks the Customer's Appointments, which survive as unnamed slots (GF-19, GF-21 audit)", async () => {
+    const owner = await createCustomer(scope(accountA, locationA), {
+      kind: "person",
+      name: "Николай Тодоров",
+    });
+    const startsAt = new Date("2026-01-01T10:00:00.000Z");
+    const endsAt = new Date("2026-01-01T10:30:00.000Z");
+    const booked = await createAppointment(scope(accountA, locationA), {
+      startsAt,
+      endsAt,
+      customerId: owner.id,
+    });
+
+    await anonymizeCustomer(scope(accountA, locationA), { id: owner.id });
+
+    const rows = await db
+      .select({ customerId: appointment.customerId })
+      .from(appointment)
+      .where(eq(appointment.id, booked.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.customerId).toBeNull();
+
+    // The agenda no longer resolves the anonymized placeholder for this slot — with
+    // no linked Customer and no free-text `customerName`, it reads as unnamed.
+    const reread = await getAppointment(scope(accountA, locationA), { id: booked.id });
+    expect(reread.customerId).toBeNull();
+    expect(reread.customerName).toBeNull();
+  });
+
+  it("strips the Consent note but keeps the Consent record (ADR-0004 addendum)", async () => {
+    const owner = await createCustomer(scope(accountA, locationA), {
+      kind: "person",
+      name: "Елена Христова",
+      phone: "+359888555666",
+    });
+    const granted = await grantConsent(scope(accountA, locationA), {
+      customerId: owner.id,
+      purpose: "sms",
+      note: "Устно съгласие по телефона с Елена Христова, +359888555666",
+    });
+
+    await anonymizeCustomer(scope(accountA, locationA), { id: owner.id });
+
+    const rows = await db
+      .select({ id: consent.id, note: consent.note, purpose: consent.purpose })
+      .from(consent)
+      .where(eq(consent.id, granted.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.note).toBeNull();
+    // The compliance record itself — what was authorised, and that it was — survives.
+    expect(rows[0]?.purpose).toBe("sms");
   });
 
   it("cannot anonymize a Customer from another Account's Location", async () => {
