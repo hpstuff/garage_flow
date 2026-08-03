@@ -96,13 +96,30 @@ export type CustomerKind = (typeof CUSTOMER_KINDS)[number];
 export const customerKind = pgEnum("customer_kind", CUSTOMER_KINDS);
 
 /**
+ * The name a Customer's own `name` is overwritten with on **Anonymization**
+ * (GF-21, ADR-0004). `name` is `NOT NULL`, so erasure cannot blank it — it is
+ * replaced with this fixed, PII-free label instead, which is also what the
+ * Vehicle/Repair-Order projections coalesce a now-unlinked owner to, so an
+ * anonymized Customer and their orphaned Vehicles read consistently.
+ */
+export const ANONYMIZED_CUSTOMER_NAME = "Анонимизиран клиент";
+
+/**
  * Customer (GF-04) — the core-loop entry point. Scoped to a **Location**
  * (ADR-0003): every row carries `accountId` + `locationId` and is only ever
  * reached through ScopedDb (ADR-0013). A Customer owns zero or more Vehicles
  * (GF-05 adds the link), so it can exist on its own.
  *
- * There is deliberately no hard-delete path: right-to-erasure is Anonymization,
- * handled separately (ADR-0004, GF-21), not row removal.
+ * There is deliberately no hard-delete path: right-to-erasure is **Anonymization**
+ * (ADR-0004, GF-21), not row removal. `anonymizedAt` models that state — `null`
+ * while the Customer is live, stamped with the erasure instant once anonymized. At
+ * that point the PII columns (`name` → {@link ANONYMIZED_CUSTOMER_NAME},
+ * `email`/`phone`/`address`/`taxId`/`note` → null) are stripped and the owner link
+ * is cleared from every Vehicle — but the row survives, so issued Invoices (which
+ * snapshot the buyer name at issue) keep their legally-required minimum intact.
+ * Modelling the state as a *timestamp*, not a boolean, keeps the "when" and makes
+ * "is anonymized" a plain `anonymized_at IS NOT NULL` read (mirrors Consent's
+ * `revokedAt`, ADR-0004).
  */
 export const customer = pgTable("customer", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -113,7 +130,7 @@ export const customer = pgTable("customer", {
     .notNull()
     .references(() => location.id, { onDelete: "cascade" }),
   kind: customerKind("kind").notNull().default("person"),
-  /** Person's full name or organization name — what lists show. */
+  /** Person's full name or organization name — what lists show. Stripped to {@link ANONYMIZED_CUSTOMER_NAME} on erasure. */
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -122,6 +139,13 @@ export const customer = pgTable("customer", {
   taxId: text("tax_id"),
   /** Internal free-text note, never shown to the Customer. */
   note: text("note"),
+  /**
+   * The **Anonymization** instant (GF-21, ADR-0004): `null` while the Customer is
+   * live, set to the erasure time once its PII is stripped and its Vehicles are
+   * unlinked. A timestamp, never a boolean — the anonymized state is distinct from
+   * row deletion, which never happens for a Customer.
+   */
+  anonymizedAt: timestamp("anonymized_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -204,11 +228,21 @@ export const vehicleKind = pgEnum("vehicle_kind", VEHICLE_KINDS);
  * **Location** like every operational row (ADR-0003) and reached only through
  * ScopedDb (ADR-0013).
  *
- * `customerId` is the **current owner** — a pointer, not history. Ownership can
- * change over time (resale): reassigning it is a plain update. The Service
- * History (GF-18) keys off the Vehicle via Repair Orders, never off this owner
- * link, so a Vehicle keeps its full history across owners. There is deliberately
- * no hard-delete path, matching Customer.
+ * `customerId` is the **current owner** — a pointer, not history, and **nullable**.
+ * Ownership can change over time (resale): reassigning it is a plain update. It is
+ * cleared to `null` when the owner is **anonymized** (GF-21, ADR-0004): erasure
+ * *unlinks* the Vehicle from the Customer, leaving an ownerless Vehicle that keeps
+ * its full Service History (GF-18 keys off Repair Orders, never this link). A live
+ * Vehicle always has an owner — only erasure orphans one — so the create/edit path
+ * still requires a Customer; nullability exists solely for that unlink.
+ *
+ * The FK is `on delete set null`, **not** cascade, and this is load-bearing for
+ * ADR-0004: it guarantees no delete of a Customer row could ever cascade down
+ * Vehicle → Repair Order → **Invoice**. Invoices must survive the statutory period
+ * and never cascade-delete with a Customer; `set null` severs that path at the
+ * source (a Customer is anonymized, never deleted, but the constraint makes the
+ * retention guarantee structural rather than merely procedural). There is
+ * deliberately no hard-delete path for a Vehicle either, matching Customer.
  */
 export const vehicle = pgTable("vehicle", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -218,10 +252,8 @@ export const vehicle = pgTable("vehicle", {
   locationId: uuid("location_id")
     .notNull()
     .references(() => location.id, { onDelete: "cascade" }),
-  /** The current-owner Customer. Cascades so tearing down an Account is clean. */
-  customerId: uuid("customer_id")
-    .notNull()
-    .references(() => customer.id, { onDelete: "cascade" }),
+  /** The current-owner Customer; `null` once the owner is anonymized (GF-21). `set null`, never cascade, so a removed Customer can never cascade-delete a Vehicle (and its Invoices). */
+  customerId: uuid("customer_id").references(() => customer.id, { onDelete: "set null" }),
   kind: vehicleKind("kind").notNull().default("car"),
   /** Registration plate — the everyday identifier the front desk searches by. */
   plate: text("plate"),

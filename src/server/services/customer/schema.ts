@@ -50,6 +50,10 @@ export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
 
 export const getCustomerSchema = z.object({ id: z.uuid() }).strict();
 
+/** Anonymizing a Customer (GF-21, ADR-0004) — the right-to-erasure action, by id. */
+export const anonymizeCustomerSchema = z.object({ id: z.uuid() }).strict();
+export type AnonymizeCustomerInput = z.infer<typeof anonymizeCustomerSchema>;
+
 export const listCustomersSchema = z
   .object({ search: optionalText(200) })
   .strict()
