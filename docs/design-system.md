@@ -53,6 +53,7 @@ Dark mode redefines each of these in `.dark`; primary becomes SnowUI's lavender.
 | `accent-blue`       | `#7dbbff`  | chart / tag, `Badge info`    |
 | `accent-purple`     | `#b899eb`  | chart / tag, `Badge accent`  |
 | `accent-green`      | `#71dd8c`  | chart / tag, `Badge success` |
+| `accent-orange`     | `#ffb55b`  | chart / tag, `Badge warning` |
 | `tint-blue`         | `#e6f1fd`  | subtle selected/hover fill   |
 | `tint-lavender`     | `#edeefc`  | subtle selected/hover fill   |
 | `chart-1..5`        | pastels    | data-viz series aliases      |

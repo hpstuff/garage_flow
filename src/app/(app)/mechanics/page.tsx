@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { ListSearchForm } from "../_components/list-search-form";
 import { listMechanicsAction } from "./_actions/mechanic-actions";
 
 /**
@@ -42,28 +42,22 @@ export default async function MechanicsPage({
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-muted-foreground">{t("subtitle")}</p>
+      </div>
+
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-          <p className="text-muted-foreground">{t("subtitle")}</p>
-        </div>
         <Link href="/mechanics/new" className={buttonVariants()}>
           {t("new")}
         </Link>
-      </div>
-
-      <form className="flex max-w-md gap-2">
-        <Input
-          type="search"
-          name="search"
+        <ListSearchForm
           defaultValue={search ?? ""}
           placeholder={t("search")}
-          aria-label={t("search")}
+          label={t("search")}
+          submitLabel={t("searchAction")}
         />
-        <button type="submit" className={buttonVariants({ variant: "outline" })}>
-          {t("searchAction")}
-        </button>
-      </form>
+      </div>
 
       {mechanics.length === 0 ? (
         <Card>
