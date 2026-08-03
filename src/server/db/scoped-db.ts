@@ -922,13 +922,23 @@ export class ScopedDb {
    * 4. **Unlinks every Vehicle**: clears `customerId` on the Customer's Vehicles in
    *    scope, so no Vehicle points back at the erased person. Each Vehicle survives
    *    (its Service History keys off Repair Orders, not this link).
+   * 5. **Unlinks every Appointment**: clears `customerId` on the Customer's
+   *    Appointments in scope, matching the Vehicle unlink — without this, the
+   *    agenda's `coalesce(customer.name, appointment.customerName)` would keep
+   *    resolving to the anonymized placeholder forever, on every past and future
+   *    slot, instead of falling back to the free-text booking name (or nothing).
+   * 6. **Strips the Consent note**: `consent.note` is unconstrained free text a
+   *    staffer could have used to jot PII (a caller's name, a phone number), so it
+   *    is nulled like the Customer's own `note`. The Consent rows themselves
+   *    (purpose, `grantedAt`/`revokedAt`) are kept — they are evidence of what was
+   *    authorised and when, not PII, and ADR-0004 only requires erasing PII, not
+   *    the compliance trail (ADR-0004 addendum).
    *
    * It deliberately never touches Invoices: an issued Invoice snapshots the buyer
    * name at issue and references the Repair Order, so it retains its legally-required
    * minimum untouched, and — because this is an update, never a delete, and the
-   * Vehicle FK is `set null` — no cascade path can remove it (ADR-0004). Consents
-   * are left as-is; they cascade only on a real Customer/Account teardown, which this
-   * is not. Commits or rolls back together, so PII-strip and unlink never diverge.
+   * Vehicle FK is `set null` — no cascade path can remove it (ADR-0004). Commits or
+   * rolls back together, so no step here can diverge from another.
    */
   async anonymizeCustomer(id: string): Promise<ScopedCustomer> {
     return this.#db.transaction(async (tx) => {
@@ -977,6 +987,19 @@ export class ScopedDb {
         .update(vehicle)
         .set({ customerId: null, updatedAt: now })
         .where(and(eq(vehicle.customerId, id), this.#vehicleScope()));
+
+      // 5. Unlink every Appointment that named this Customer (in scope) — same
+      // reasoning as the Vehicle unlink above.
+      await tx
+        .update(appointment)
+        .set({ customerId: null, updatedAt: now })
+        .where(and(eq(appointment.customerId, id), this.#appointmentScope()));
+
+      // 6. Strip the free-text Consent note (in scope) — the Consent rows survive.
+      await tx
+        .update(consent)
+        .set({ note: null, updatedAt: now })
+        .where(and(eq(consent.customerId, id), this.#consentScope()));
 
       return anonymized;
     });
