@@ -74,54 +74,52 @@ export default async function VehiclesPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.plate")}</TableHead>
-                <TableHead>{t("columns.vehicle")}</TableHead>
-                <TableHead>{t("columns.kind")}</TableHead>
-                <TableHead>{t("columns.owner")}</TableHead>
-                <TableHead>{t("columns.createdAt")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vehicles.map((vehicle) => {
-                const description = [vehicle.make, vehicle.model, vehicle.year]
-                  .filter(Boolean)
-                  .join(" ");
-                return (
-                  <TableRow key={vehicle.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/vehicles/${vehicle.id}`} className="hover:underline">
-                        {vehicle.plate ?? vehicle.vin ?? "—"}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{description || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={vehicle.kind === "motorcycle" ? "info" : "secondary"}>
-                        {tKind(vehicle.kind)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{vehicle.customerName}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(vehicle.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        href={`/vehicles/${vehicle.id}/edit`}
-                        className={buttonVariants({ variant: "ghost", size: "sm" })}
-                      >
-                        {t("edit")}
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.plate")}</TableHead>
+              <TableHead>{t("columns.vehicle")}</TableHead>
+              <TableHead>{t("columns.kind")}</TableHead>
+              <TableHead>{t("columns.owner")}</TableHead>
+              <TableHead>{t("columns.createdAt")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {vehicles.map((vehicle) => {
+              const description = [vehicle.make, vehicle.model, vehicle.year]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <TableRow key={vehicle.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/vehicles/${vehicle.id}`} className="hover:underline">
+                      {vehicle.plate ?? vehicle.vin ?? "—"}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{description || "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={vehicle.kind === "motorcycle" ? "info" : "secondary"}>
+                      {tKind(vehicle.kind)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{vehicle.customerName}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(vehicle.createdAt)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/vehicles/${vehicle.id}/edit`}
+                      className={buttonVariants({ variant: "ghost", size: "sm" })}
+                    >
+                      {t("edit")}
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

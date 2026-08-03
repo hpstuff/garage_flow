@@ -73,37 +73,35 @@ export default async function MechanicsPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.name")}</TableHead>
-                <TableHead>{t("columns.note")}</TableHead>
-                <TableHead>{t("columns.createdAt")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.name")}</TableHead>
+              <TableHead>{t("columns.note")}</TableHead>
+              <TableHead>{t("columns.createdAt")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {mechanics.map((mechanic) => (
+              <TableRow key={mechanic.id}>
+                <TableCell className="font-medium">{mechanic.name}</TableCell>
+                <TableCell className="text-muted-foreground">{mechanic.note ?? "—"}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(mechanic.createdAt)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/mechanics/${mechanic.id}/edit`}
+                    className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  >
+                    {t("edit")}
+                  </Link>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mechanics.map((mechanic) => (
-                <TableRow key={mechanic.id}>
-                  <TableCell className="font-medium">{mechanic.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{mechanic.note ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(mechanic.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/mechanics/${mechanic.id}/edit`}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
-                    >
-                      {t("edit")}
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

@@ -97,26 +97,24 @@ export default async function AppointmentsPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.time")}</TableHead>
-                <TableHead>{t("columns.customer")}</TableHead>
-                <TableHead>{t("columns.vehicle")}</TableHead>
-                <TableHead>{t("columns.mechanic")}</TableHead>
-                <TableHead>{t("columns.bay")}</TableHead>
-                <TableHead>{t("columns.status")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {agenda.entries.map((entry) => (
-                <AgendaRow key={entry.appointment.id} entry={entry} t={t} />
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.time")}</TableHead>
+              <TableHead>{t("columns.customer")}</TableHead>
+              <TableHead>{t("columns.vehicle")}</TableHead>
+              <TableHead>{t("columns.mechanic")}</TableHead>
+              <TableHead>{t("columns.bay")}</TableHead>
+              <TableHead>{t("columns.status")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {agenda.entries.map((entry) => (
+              <AgendaRow key={entry.appointment.id} entry={entry} t={t} />
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

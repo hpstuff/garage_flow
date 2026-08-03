@@ -74,45 +74,43 @@ export default async function CustomersPage({
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("columns.name")}</TableHead>
-                <TableHead>{t("columns.kind")}</TableHead>
-                <TableHead>{t("columns.contact")}</TableHead>
-                <TableHead>{t("columns.createdAt")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("columns.name")}</TableHead>
+              <TableHead>{t("columns.kind")}</TableHead>
+              <TableHead>{t("columns.contact")}</TableHead>
+              <TableHead>{t("columns.createdAt")}</TableHead>
+              <TableHead className="text-right">{t("columns.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {customers.map((customer) => (
+              <TableRow key={customer.id}>
+                <TableCell className="font-medium">{customer.name}</TableCell>
+                <TableCell>
+                  <Badge variant={customer.kind === "organization" ? "info" : "secondary"}>
+                    {tKind(customer.kind)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {customer.phone ?? customer.email ?? "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(customer.createdAt)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Link
+                    href={`/customers/${customer.id}/edit`}
+                    className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  >
+                    {t("edit")}
+                  </Link>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell className="font-medium">{customer.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={customer.kind === "organization" ? "info" : "secondary"}>
-                      {tKind(customer.kind)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {customer.phone ?? customer.email ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(customer.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/customers/${customer.id}/edit`}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
-                    >
-                      {t("edit")}
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );
