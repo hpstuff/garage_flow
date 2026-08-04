@@ -30,6 +30,10 @@ export function MechanicForm({ mechanic }: MechanicFormProps) {
 
   const [name, setName] = useState(mechanic?.name ?? "");
   const [note, setNote] = useState(mechanic?.note ?? "");
+  // Convert stored minor-units back to human BGN string for the form.
+  const [hourlyRate, setHourlyRate] = useState(
+    mechanic && mechanic.hourlyRate != null ? String(mechanic.hourlyRate / 100) : "",
+  );
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -41,7 +45,10 @@ export function MechanicForm({ mechanic }: MechanicFormProps) {
     setFieldErrors({});
     setFormError(null);
 
-    const values = { name, note };
+    // Convert form string → minor-units number; blank stays undefined (service coerces to 0).
+    const hourlyRateValue =
+      hourlyRate.trim() !== "" ? Number(hourlyRate) : undefined;
+    const values = { name, note, ...(hourlyRateValue != null && { hourlyRate: hourlyRateValue }) };
     const result: MechanicMutationResult = isEdit
       ? await updateMechanicAction({ id: mechanic?.id, ...values })
       : await createMechanicAction(values);
@@ -73,6 +80,21 @@ export function MechanicForm({ mechanic }: MechanicFormProps) {
 
       <Field label={t("note")} description={t("noteHint")} error={firstError(fieldErrors, "note")}>
         <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+      </Field>
+
+      <Field
+        label={t("hourlyRate")}
+        description={t("hourlyRateHint")}
+        error={firstError(fieldErrors, "hourlyRate")}
+      >
+        <Input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          value={hourlyRate}
+          onChange={(e) => setHourlyRate(e.target.value)}
+        />
       </Field>
 
       {formError ? (

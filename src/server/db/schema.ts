@@ -300,7 +300,8 @@ export const mechanic = pgTable("mechanic", {
   name: text("name").notNull(),
   /** Internal free-text note (specialty, phone, …), never shown to the Customer. */
   note: text("note"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  /** Default hourly rate in integer minor units — prefill target for Labor lines; 0 = blank. */
+  hourlyRate: integer("hourly_rate").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
