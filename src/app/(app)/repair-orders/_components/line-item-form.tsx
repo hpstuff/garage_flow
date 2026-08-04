@@ -146,34 +146,34 @@ export function LineItemForm({
           />
         </Field>
 
-{isLabor ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="line-mechanic">{t("mechanic")}</Label>
-          <Select value={mechanicId} onValueChange={selectMechanicAndPrefill}>
-            <SelectTrigger
-              id="line-mechanic"
-              aria-invalid={Boolean(firstError(fieldErrors, "mechanicId"))}
-            >
-              <SelectValue placeholder={t("mechanicPlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {mechanics.map((mechanic) => (
-                <SelectItem key={mechanic.id} value={mechanic.id}>
-                  {mechanic.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {mechanics.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("noMechanics")}</p>
-          ) : null}
-          {firstError(fieldErrors, "mechanicId") ? (
-            <p className="text-sm font-medium text-destructive">
-              {firstError(fieldErrors, "mechanicId")}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+        {isLabor ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="line-mechanic">{t("mechanic")}</Label>
+            <Select value={mechanicId} onValueChange={selectMechanicAndPrefill}>
+              <SelectTrigger
+                id="line-mechanic"
+                aria-invalid={Boolean(firstError(fieldErrors, "mechanicId"))}
+              >
+                <SelectValue placeholder={t("mechanicPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {mechanics.map((mechanic) => (
+                  <SelectItem key={mechanic.id} value={mechanic.id}>
+                    {mechanic.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {mechanics.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("noMechanics")}</p>
+            ) : null}
+            {firstError(fieldErrors, "mechanicId") ? (
+              <p className="text-sm font-medium text-destructive">
+                {firstError(fieldErrors, "mechanicId")}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <Field
           label={isLabor ? t("hours") : t("quantity")}

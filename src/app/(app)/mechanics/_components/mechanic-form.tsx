@@ -46,8 +46,7 @@ export function MechanicForm({ mechanic }: MechanicFormProps) {
     setFormError(null);
 
     // Convert form string → minor-units number; blank stays undefined (service coerces to 0).
-    const hourlyRateValue =
-      hourlyRate.trim() !== "" ? Number(hourlyRate) : undefined;
+    const hourlyRateValue = hourlyRate.trim() !== "" ? Number(hourlyRate) : undefined;
     const values = { name, note, ...(hourlyRateValue != null && { hourlyRate: hourlyRateValue }) };
     const result: MechanicMutationResult = isEdit
       ? await updateMechanicAction({ id: mechanic?.id, ...values })
