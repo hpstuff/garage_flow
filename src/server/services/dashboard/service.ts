@@ -42,9 +42,14 @@ export async function getDashboard(scope: Scope, input: unknown): Promise<Dashbo
   return {
     location,
     metrics: {
+      // "Active" = every Kanban Stage except the terminal one (CONTEXT.md): an
+      // order still in `waiting`…`ready` has work left; `delivered` is done.
       activeRepairOrders: repairOrders.filter((order) => order.stage !== TERMINAL_KANBAN_STAGE)
         .length,
-      customers: customers.length,
+      // Anonymized Customers (GF-21) are erasure-in-place, not deletion — the row
+      // stays for orphaned Vehicles/history to read consistently, but it no longer
+      // represents a real, contactable Customer, so it shouldn't inflate this count.
+      customers: customers.filter((customer) => customer.anonymizedAt === null).length,
       vehicles: vehicles.length,
     },
     ordersByStage: KANBAN_STAGES.map((stage) => ({
