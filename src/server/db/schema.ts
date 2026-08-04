@@ -205,7 +205,7 @@ export const consent = pgTable("consent", {
   grantedAt: timestamp("granted_at").defaultNow().notNull(),
   /** Revocation instant; `null` while the consent stands (ADR-0004). Never a boolean flag. */
   revokedAt: timestamp("revoked_at"),
-  /** Optional internal note on how consent was captured (e.g. "signed form"), never shown externally. */
+  /** Optional internal note on how consent was captured (e.g. "signed form"), never shown externally. Nulled on Customer erasure (ADR-0004 addendum) — free text may carry PII. */
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
