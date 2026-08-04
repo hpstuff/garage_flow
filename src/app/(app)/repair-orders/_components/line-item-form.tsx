@@ -21,8 +21,8 @@ import {
   updateLineItemAction,
 } from "../_actions/line-item-actions";
 
-/** A Mechanic a Labor line can attribute to. */
-export type MechanicOption = { id: string; name: string };
+/** A Mechanic a Labor line can attribute to — hourlyRateMinor is their default rate in integer minor units (BGN), null when not set. */
+export type MechanicOption = { id: string; name: string; hourlyRateMinor?: number | null };
 
 type LineItemFormProps = {
   repairOrderId: string;
@@ -63,7 +63,17 @@ export function LineItemForm({
   const [description, setDescription] = useState(lineItem?.description ?? "");
   const [mechanicId, setMechanicId] = useState(lineItem?.mechanicId ?? "");
   const [quantity, setQuantity] = useState(lineItem ? fromThousandths(lineItem.quantity) : "");
+  // For a new row the price starts empty; when editing it's the saved value.
   const [unitPrice, setUnitPrice] = useState(lineItem ? fromMinorUnits(lineItem.unitPrice) : "");
+
+  /** When a mechanic is selected on a *new* row and they have a default rate, prefill unitPrice. */
+  function selectMechanicAndPrefill(id: string) {
+    if (!lineItem && type === "labor") {
+      const chosen = mechanics.find((m) => m.id === id);
+      setUnitPrice(chosen?.hourlyRateMinor != null ? fromMinorUnits(chosen.hourlyRateMinor) : "");
+    }
+    setMechanicId(id);
+  }
   // Prefill the rate from the Location's default (GF-12); the field is hidden and
   // submitted as 0 when the Location is not VAT-registered.
   const [vatRate, setVatRate] = useState(
@@ -137,9 +147,9 @@ export function LineItemForm({
         </Field>
 
         {isLabor ? (
-          <div className="w-48 space-y-1.5">
+          <div className="space-y-1.5">
             <Label htmlFor="line-mechanic">{t("mechanic")}</Label>
-            <Select value={mechanicId} onValueChange={setMechanicId}>
+            <Select value={mechanicId} onValueChange={selectMechanicAndPrefill}>
               <SelectTrigger
                 id="line-mechanic"
                 aria-invalid={Boolean(firstError(fieldErrors, "mechanicId"))}
@@ -154,6 +164,9 @@ export function LineItemForm({
                 ))}
               </SelectContent>
             </Select>
+            {mechanics.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("noMechanics")}</p>
+            ) : null}
             {firstError(fieldErrors, "mechanicId") ? (
               <p className="text-sm font-medium text-destructive">
                 {firstError(fieldErrors, "mechanicId")}

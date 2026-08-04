@@ -63,7 +63,7 @@ export default async function RepairOrderDetailPage({
   ]);
   const lineItems = itemsResult.ok ? itemsResult.data : [];
   const mechanicOptions = mechanicsResult.ok
-    ? mechanicsResult.data.map((mechanic) => ({ id: mechanic.id, name: mechanic.name }))
+    ? mechanicsResult.data.map((m) => ({ id: m.id, name: m.name, hourlyRateMinor: m.hourlyRate }))
     : [];
   // On a failed VAT load, fall back to the Location default (registered at the
   // standard rate) rather than silently dropping VAT from a registered shop.
