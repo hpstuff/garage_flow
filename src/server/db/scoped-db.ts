@@ -212,6 +212,7 @@ export interface ScopedMechanic {
   userId: string | null;
   name: string;
   note: string | null;
+  hourlyRate: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -232,6 +233,7 @@ const mechanicColumns = {
   userId: mechanic.userId,
   name: mechanic.name,
   note: mechanic.note,
+  hourlyRate: mechanic.hourlyRate,
   createdAt: mechanic.createdAt,
   updatedAt: mechanic.updatedAt,
 } as const;
