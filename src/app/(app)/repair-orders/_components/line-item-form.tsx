@@ -119,9 +119,9 @@ export function LineItemForm({
   const isLabor = type === "labor";
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
+    <form onSubmit={onSubmit} className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="w-28 space-y-1.5">
           <Label htmlFor="line-type">{t("type")}</Label>
           <Select value={type} onValueChange={(value) => setType(value as "labor" | "part")}>
             <SelectTrigger id="line-type">
@@ -137,7 +137,7 @@ export function LineItemForm({
         <Field
           label={t("description")}
           error={firstError(fieldErrors, "description")}
-          className="sm:col-span-1"
+          className="min-w-48 flex-1"
         >
           <Input
             value={description}
@@ -145,9 +145,8 @@ export function LineItemForm({
             placeholder={t("descriptionPlaceholder")}
           />
         </Field>
-      </div>
 
-      {isLabor ? (
+{isLabor ? (
         <div className="space-y-1.5">
           <Label htmlFor="line-mechanic">{t("mechanic")}</Label>
           <Select value={mechanicId} onValueChange={selectMechanicAndPrefill}>
@@ -176,10 +175,10 @@ export function LineItemForm({
         </div>
       ) : null}
 
-      <div className={vatRegistered ? "grid gap-4 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-2"}>
         <Field
           label={isLabor ? t("hours") : t("quantity")}
           error={firstError(fieldErrors, "quantity")}
+          className="w-24"
         >
           <Input
             type="number"
@@ -194,6 +193,7 @@ export function LineItemForm({
         <Field
           label={isLabor ? t("rate") : t("unitPrice")}
           error={firstError(fieldErrors, "unitPrice")}
+          className="w-28"
         >
           <Input
             type="number"
@@ -206,7 +206,7 @@ export function LineItemForm({
         </Field>
 
         {vatRegistered ? (
-          <Field label={t("vatRate")} error={firstError(fieldErrors, "vatRate")}>
+          <Field label={t("vatRate")} error={firstError(fieldErrors, "vatRate")} className="w-24">
             <Input
               type="number"
               inputMode="decimal"
@@ -219,6 +219,10 @@ export function LineItemForm({
           </Field>
         ) : null}
       </div>
+
+      {isLabor && mechanics.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("noMechanics")}</p>
+      ) : null}
 
       {formError ? (
         <p className="text-sm text-destructive" role="alert">

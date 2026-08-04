@@ -46,6 +46,14 @@ export function lineItemAmount(quantityThousandths: number, unitPriceMinor: numb
 export interface RepairOrderTotals {
   /** Sum of the net line amounts. */
   net: number;
+  /** Sum of the net amounts of the Labor lines only (a `net` breakdown, ADR-0009). */
+  laborNet: number;
+  /** Labor's `laborNet` plus its own share of `vat` — Labor's `net + vat`. */
+  laborGross: number;
+  /** Sum of the net amounts of the Part lines only (a `net` breakdown, ADR-0009). */
+  partsNet: number;
+  /** Parts' `partsNet` plus their own share of `vat` — Parts' `net + vat`. */
+  partsGross: number;
   /**
    * VAT, rounded per line (basis points on the net amount) then summed — or
    * `null` when the Location is **not VAT-registered** (ADR-0006). `null` is the
@@ -75,17 +83,42 @@ export function computeRepairOrderTotals(
   vatConfig: VatConfig,
 ): RepairOrderTotals {
   const net = items.reduce((sum, item) => sum + item.amount, 0);
+  const laborItems = items.filter((item) => item.type === "labor");
+  const partItems = items.filter((item) => item.type === "part");
+  const laborNet = laborItems.reduce((sum, item) => sum + item.amount, 0);
+  const partsNet = partItems.reduce((sum, item) => sum + item.amount, 0);
   const currency = items[0]?.currency ?? "BGN";
 
   if (vatConfig.mode === "not_registered") {
-    return { net, vat: null, gross: net, currency };
+    return {
+      net,
+      laborNet,
+      laborGross: laborNet,
+      partsNet,
+      partsGross: partsNet,
+      vat: null,
+      gross: net,
+      currency,
+    };
   }
 
+  const lineVat = (item: ScopedLineItem) => Math.round((item.amount * item.vatRate) / 10000);
   let vat = 0;
   for (const item of items) {
-    vat += Math.round((item.amount * item.vatRate) / 10000);
+    vat += lineVat(item);
   }
-  return { net, vat, gross: net + vat, currency };
+  const laborVat = laborItems.reduce((sum, item) => sum + lineVat(item), 0);
+  const partsVat = partItems.reduce((sum, item) => sum + lineVat(item), 0);
+  return {
+    net,
+    laborNet,
+    laborGross: laborNet + laborVat,
+    partsNet,
+    partsGross: partsNet + partsVat,
+    vat,
+    gross: net + vat,
+    currency,
+  };
 }
 
 /**

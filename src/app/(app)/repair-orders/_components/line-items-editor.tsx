@@ -75,7 +75,7 @@ export function LineItemsEditor({
 
   return (
     <Card>
-      <CardContent className="space-y-4 py-6">
+      <CardContent className="space-y-3 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">{t("title")}</h2>
@@ -94,45 +94,45 @@ export function LineItemsEditor({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("columns.type")}</TableHead>
-                <TableHead>{t("columns.description")}</TableHead>
-                <TableHead>{t("columns.mechanic")}</TableHead>
-                <TableHead className="text-right">{t("columns.quantity")}</TableHead>
-                <TableHead className="text-right">{t("columns.unitPrice")}</TableHead>
+                <TableHead className="h-9">{t("columns.type")}</TableHead>
+                <TableHead className="h-9">{t("columns.description")}</TableHead>
+                <TableHead className="h-9">{t("columns.mechanic")}</TableHead>
+                <TableHead className="h-9 text-right">{t("columns.quantity")}</TableHead>
+                <TableHead className="h-9 text-right">{t("columns.unitPrice")}</TableHead>
                 {vatRegistered ? (
-                  <TableHead className="text-right">{t("columns.vat")}</TableHead>
+                  <TableHead className="h-9 text-right">{t("columns.vat")}</TableHead>
                 ) : null}
-                <TableHead className="text-right">{t("columns.amount")}</TableHead>
-                <TableHead className="text-right">{t("columns.actions")}</TableHead>
+                <TableHead className="h-9 text-right">{t("columns.amount")}</TableHead>
+                <TableHead className="h-9 text-right">{t("columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell>
+                  <TableCell className="py-2">
                     <Badge variant={item.type === "labor" ? "info" : "secondary"}>
                       {t(`types.${item.type}`)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-medium">{item.description}</TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="py-2 font-medium">{item.description}</TableCell>
+                  <TableCell className="py-2 text-muted-foreground">
                     {item.mechanicName ?? "—"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="py-2 text-right tabular-nums">
                     {formatQuantity(item.quantity)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="py-2 text-right tabular-nums">
                     {formatMoney(item.unitPrice, item.currency)}
                   </TableCell>
                   {vatRegistered ? (
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="py-2 text-right tabular-nums">
                       {formatVatRate(item.vatRate)}
                     </TableCell>
                   ) : null}
-                  <TableCell className="text-right font-medium tabular-nums">
+                  <TableCell className="py-2 text-right font-medium tabular-nums">
                     {formatMoney(item.amount, item.currency)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="py-2 text-right">
                     <div className="flex justify-end gap-1">
                       <Button
                         size="sm"
@@ -181,6 +181,26 @@ export function LineItemsEditor({
         {items.length > 0 ? (
           <dl className="ml-auto w-full max-w-xs space-y-1.5 text-sm">
             <div className="flex justify-between">
+              <dt className="text-muted-foreground">{t("totals.labor")}</dt>
+              <dd className="tabular-nums">{formatMoney(totals.laborNet, totals.currency)}</dd>
+            </div>
+            {vatRegistered ? (
+              <div className="flex justify-between pl-3 text-xs">
+                <dt className="text-muted-foreground">{t("totals.laborWithVat")}</dt>
+                <dd className="tabular-nums">{formatMoney(totals.laborGross, totals.currency)}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">{t("totals.parts")}</dt>
+              <dd className="tabular-nums">{formatMoney(totals.partsNet, totals.currency)}</dd>
+            </div>
+            {vatRegistered ? (
+              <div className="flex justify-between pl-3 text-xs">
+                <dt className="text-muted-foreground">{t("totals.partsWithVat")}</dt>
+                <dd className="tabular-nums">{formatMoney(totals.partsGross, totals.currency)}</dd>
+              </div>
+            ) : null}
+            <div className="flex justify-between border-t border-border pt-1.5">
               <dt className="text-muted-foreground">{t("totals.net")}</dt>
               <dd className="tabular-nums">{formatMoney(totals.net, totals.currency)}</dd>
             </div>
