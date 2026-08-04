@@ -302,6 +302,7 @@ export const mechanic = pgTable("mechanic", {
   note: text("note"),
   /** Default hourly rate in integer minor units — prefill target for Labor lines; 0 = blank. */
   hourlyRate: integer("hourly_rate").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
