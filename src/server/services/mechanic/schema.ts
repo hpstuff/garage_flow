@@ -30,8 +30,8 @@ function optionalText(max: number) {
  * integer minor units (*100). Blank / absent → `null` so the DB default applies.
  */
 function optionalMinorUnit(message: string) {
-  return z.preprocess(
-    (value) => {
+  return z
+    .preprocess((value) => {
       if (
         value === null ||
         value === undefined ||
@@ -40,10 +40,9 @@ function optionalMinorUnit(message: string) {
         return undefined;
       }
       const n = Number(value);
-      return isNaN(n) ? 0 : n;
-    },
-    z.number().min(0, message).optional(),
-  ).transform((v) => (v ?? 0) * 100);
+      return Number.isNaN(n) ? 0 : n;
+    }, z.number().min(0, message).optional())
+    .transform((v) => (v ?? 0) * 100);
 }
 
 /** The editable fields shared by create and edit. A Mechanic is, at minimum, a name. */
