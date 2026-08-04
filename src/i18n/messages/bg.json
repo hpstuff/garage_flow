@@ -326,6 +326,10 @@
         "actions": "Действия"
       },
       "totals": {
+        "labor": "Труд",
+        "laborWithVat": "Труд с ДДС",
+        "parts": "Части",
+        "partsWithVat": "Части с ДДС",
         "net": "Междинна сума",
         "vat": "ДДС",
         "noVat": "Без ДДС",

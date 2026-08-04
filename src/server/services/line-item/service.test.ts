@@ -61,6 +61,34 @@ describe("line item money math (pure, no DB)", () => {
     expect(totals.currency).toBe("BGN");
   });
 
+  it("breaks net and gross down into Labor and Part subtotals (ADR-0009)", () => {
+    const items = [
+      { type: "labor", amount: 7500, vatRate: 2000, currency: "BGN" }, // VAT 1500
+      { type: "labor", amount: 2500, vatRate: 2000, currency: "BGN" }, // VAT 500
+      { type: "part", amount: 3000, vatRate: 900, currency: "BGN" }, // VAT 270
+    ] as ScopedLineItem[];
+
+    const totals = computeRepairOrderTotals(items, REGISTERED);
+    expect(totals.laborNet).toBe(10000);
+    expect(totals.laborGross).toBe(12000);
+    expect(totals.partsNet).toBe(3000);
+    expect(totals.partsGross).toBe(3270);
+    expect(totals.net).toBe(13000);
+    expect(totals.vat).toBe(2270);
+    expect(totals.gross).toBe(15270);
+  });
+
+  it("carries laborGross/partsGross equal to their net when not registered (ADR-0006)", () => {
+    const items = [
+      { type: "labor", amount: 7500, vatRate: 2000, currency: "BGN" },
+      { type: "part", amount: 3000, vatRate: 900, currency: "BGN" },
+    ] as ScopedLineItem[];
+
+    const totals = computeRepairOrderTotals(items, NOT_REGISTERED);
+    expect(totals.laborGross).toBe(totals.laborNet);
+    expect(totals.partsGross).toBe(totals.partsNet);
+  });
+
   it("carries a true zero-VAT total when not registered, ignoring per-line rates (ADR-0006)", () => {
     // Same lines with non-zero VAT rates, but a not-registered Location means no
     // VAT applies at all: `vat` is null (not 0) and gross equals net.
@@ -79,6 +107,10 @@ describe("line item money math (pure, no DB)", () => {
   it("is all zero for an order with no lines (registered → VAT 0)", () => {
     expect(computeRepairOrderTotals([], REGISTERED)).toEqual({
       net: 0,
+      laborNet: 0,
+      laborGross: 0,
+      partsNet: 0,
+      partsGross: 0,
       vat: 0,
       gross: 0,
       currency: "BGN",
@@ -88,6 +120,10 @@ describe("line item money math (pure, no DB)", () => {
   it("is net-only with null VAT for an order with no lines when not registered", () => {
     expect(computeRepairOrderTotals([], NOT_REGISTERED)).toEqual({
       net: 0,
+      laborNet: 0,
+      laborGross: 0,
+      partsNet: 0,
+      partsGross: 0,
       vat: null,
       gross: 0,
       currency: "BGN",

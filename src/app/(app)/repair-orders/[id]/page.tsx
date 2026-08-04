@@ -21,11 +21,13 @@ import { stageBadgeVariant } from "../_components/stages";
 import { invoiceStatusVariant, paymentStatusVariant } from "../_components/status";
 
 /**
- * Repair Order detail (GF-08). Shows the Complaint and Diagnosis as distinct
- * fields (ADR-0009), the Vehicle and owner, the optional lead Mechanic, and the
- * invoice/payment references (ADR-0002) — the latter read-only here, since they
- * are set by GF-14/GF-15, never by editing the order. A 404 for an order outside
- * the caller's scope, never a cross-tenant read.
+ * Repair Order detail (GF-08). The Vehicle and owner are already in the header
+ * (H1 links to the Vehicle, the subtitle names the owner), so the detail card
+ * only adds what the header doesn't: the Complaint and Diagnosis as distinct
+ * fields (ADR-0009), the optional lead Mechanic, and the invoice/payment
+ * references (ADR-0002) — the latter read-only here, since they are set by
+ * GF-14/GF-15, never by editing the order. A 404 for an order outside the
+ * caller's scope, never a cross-tenant read.
  */
 export default async function RepairOrderDetailPage({
   params,
@@ -86,7 +88,7 @@ export default async function RepairOrderDetailPage({
   const appointment = appointmentResult?.ok ? appointmentResult.data : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SetBreadcrumb
         segments={[
           { label: tNav("repairOrders"), href: "/repair-orders" },
@@ -96,7 +98,11 @@ export default async function RepairOrderDetailPage({
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{vehicleTitle}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              <Link href={`/vehicles/${order.vehicleId}`} className="hover:underline">
+                {vehicleTitle}
+              </Link>
+            </h1>
             <Badge variant={stageBadgeVariant[order.stage]}>
               {tStatus(`stage.${order.stage}`)}
             </Badge>
@@ -140,31 +146,25 @@ export default async function RepairOrderDetailPage({
       </div>
 
       <Card>
-        <CardContent className="grid gap-4 py-6 sm:grid-cols-2">
-          <Detail label={t("vehicle")}>
-            <Link href={`/vehicles/${order.vehicleId}`} className="hover:underline">
-              {vehicleTitle}
-            </Link>
-          </Detail>
-          <Detail label={t("owner")}>{order.customerName}</Detail>
-          <Detail label={t("mechanic")}>{order.mechanicName ?? t("noLead")}</Detail>
-          <Detail label={t("createdAt")}>{formatDate(order.createdAt)}</Detail>
-          {appointment ? (
-            <Detail label={t("appointment")}>
-              <Link
-                href={`/appointments?date=${toDayParam(appointment.startsAt)}`}
-                className="hover:underline"
-              >
-                {formatDate(appointment.startsAt)} · {formatTime(appointment.startsAt)}
-              </Link>
-            </Detail>
-          ) : null}
-          <Detail label={t("complaint")} full>
-            {order.complaint ?? t("empty")}
-          </Detail>
-          <Detail label={t("diagnosis")} full>
-            {order.diagnosis ?? t("empty")}
-          </Detail>
+        <CardContent className="space-y-4 py-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Detail label={t("mechanic")}>{order.mechanicName ?? t("noLead")}</Detail>
+            <Detail label={t("createdAt")}>{formatDate(order.createdAt)}</Detail>
+            {appointment ? (
+              <Detail label={t("appointment")}>
+                <Link
+                  href={`/appointments?date=${toDayParam(appointment.startsAt)}`}
+                  className="hover:underline"
+                >
+                  {formatDate(appointment.startsAt)} · {formatTime(appointment.startsAt)}
+                </Link>
+              </Detail>
+            ) : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Detail label={t("complaint")}>{order.complaint ?? t("empty")}</Detail>
+            <Detail label={t("diagnosis")}>{order.diagnosis ?? t("empty")}</Detail>
+          </div>
         </CardContent>
       </Card>
 
@@ -187,10 +187,10 @@ function toDayParam(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/** One label/value pair in the detail grid; `full` spans both columns for prose. */
-function Detail({ label, children, full }: { label: string; children: ReactNode; full?: boolean }) {
+/** One label/value pair in the detail grid. */
+function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className={full ? "space-y-0.5 sm:col-span-2" : "space-y-0.5"}>
+    <div className="space-y-0.5">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="text-sm font-medium whitespace-pre-wrap">{children}</dd>
     </div>
