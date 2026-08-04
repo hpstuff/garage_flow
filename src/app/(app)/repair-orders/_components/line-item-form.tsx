@@ -21,8 +21,8 @@ import {
   updateLineItemAction,
 } from "../_actions/line-item-actions";
 
-/** A Mechanic a Labor line can attribute to — hourlyRateMinor is their default rate in integer minor units (BGN), null when not set. */
-export type MechanicOption = { id: string; name: string; hourlyRateMinor: number | null };
+/** A Mechanic a Labor line can attribute to — hourlyRateMinor is their default rate in integer minor units (BGN), undefined when not set. */
+export type MechanicOption = { id: string; name: string; hourlyRateMinor?: number };
 
 type LineItemFormProps = {
   repairOrderId: string;
