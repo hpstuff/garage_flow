@@ -384,17 +384,22 @@ export type AppointmentRow = typeof appointment.$inferSelect;
  * **reference only** on the RO (ADR-0002): the Invoice is the immutable
  * first-class document, and this flag is set by the invoicing slice (GF-14),
  * never by editing an issued Invoice. `not_invoiced` is the opening state.
+ * `credited` is set by the Credit Note slice (GF-16) once the Invoice has been
+ * voided by a Credit Note — a terminal state, distinct from `invoiced`, so the
+ * RO list/board never keeps showing a corrected Invoice as still live.
  */
-export const INVOICE_STATUSES = ["not_invoiced", "invoiced"] as const;
+export const INVOICE_STATUSES = ["not_invoiced", "invoiced", "credited"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const invoiceStatus = pgEnum("invoice_status", INVOICE_STATUSES);
 
 /**
  * Where a Repair Order stands on getting paid. Also a **reference only** on the
  * RO (ADR-0002): Payments are recorded against the Invoice (GF-15), which sets
- * this — supporting partial payment. `unpaid` is the opening state.
+ * this — supporting partial payment. `unpaid` is the opening state. `credited`
+ * is set by the Credit Note slice (GF-16) alongside `invoiceStatus`, once the
+ * Invoice is voided — no further Payment can move it away from this state.
  */
-export const PAYMENT_STATUSES = ["unpaid", "partially_paid", "paid"] as const;
+export const PAYMENT_STATUSES = ["unpaid", "partially_paid", "paid", "credited"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const paymentStatus = pgEnum("payment_status", PAYMENT_STATUSES);
 

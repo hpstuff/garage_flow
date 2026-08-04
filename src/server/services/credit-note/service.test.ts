@@ -23,7 +23,7 @@ import type { ScopedInvoice } from "../../db/scoped-db";
 import { ConflictError, NotFoundError, ValidationError } from "../../domain/errors";
 import { getInvoice, issueInvoice } from "../invoice/service";
 import { createLineItem } from "../line-item/service";
-import { createRepairOrder } from "../repair-order/service";
+import { createRepairOrder, getRepairOrder } from "../repair-order/service";
 import {
   buildCreditNoteInput,
   getCreditNote,
@@ -352,5 +352,20 @@ describe.skipIf(!hasDb)("credit note service — integration (real Postgres, ADR
     expect(
       await getCreditNoteForInvoice(scope(accountB, locationB), { invoiceId: invoice.id }),
     ).toBeNull();
+  });
+
+  it("flips the RO's invoiceStatus/paymentStatus to credited (GF-16 vs GF-62 audit)", async () => {
+    const s = scope(accountA, locationA);
+    const invoice = await invoiceOrder(accountA, locationA, vehicleA, mechanicA);
+
+    const before = await getRepairOrder(s, { id: invoice.repairOrderId });
+    expect(before.invoiceStatus).toBe("invoiced");
+    expect(before.paymentStatus).toBe("unpaid");
+
+    await issueCreditNote(s, { invoiceId: invoice.id });
+
+    const after = await getRepairOrder(s, { id: invoice.repairOrderId });
+    expect(after.invoiceStatus).toBe("credited");
+    expect(after.paymentStatus).toBe("credited");
   });
 });
