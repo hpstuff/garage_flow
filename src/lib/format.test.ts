@@ -4,7 +4,7 @@ import { formatMoney, formatNumber, formatQuantity, formatVatRate } from "./form
 describe("formatMoney", () => {
   it("treats the amount as integer minor units (ADR-0011/0017)", () => {
     // 12345 minor units = 123,45 in the major unit — never float math.
-    expect(formatMoney(12345, "BGN")).toContain("123,45");
+    expect(formatMoney(12345, "EUR")).toContain("123,45");
     expect(formatMoney(0, "EUR")).toContain("0,00");
   });
 

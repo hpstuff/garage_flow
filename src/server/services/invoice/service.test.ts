@@ -68,7 +68,7 @@ function fakeLine(overrides: Partial<ScopedLineItem> = {}): ScopedLineItem {
     unitPrice: 5000,
     vatRate: 2000,
     amount: 5000,
-    currency: "BGN",
+    currency: "EUR",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
@@ -97,7 +97,7 @@ describe("buildInvoiceInput — pure snapshot (ADR-0002/0009)", () => {
     expect(input.customerName).toBe("Клиент");
     expect(input.vehiclePlate).toBe("CA1234AB");
     // net 12000; VAT rounded per line (20% of 6000 = 1200 each) → 2400; gross 14400.
-    expect(input).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "BGN" });
+    expect(input).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "EUR" });
   });
 
   it("copies each line in order with a 1-based position — and no Mechanic attribution", () => {
@@ -120,7 +120,7 @@ describe("buildInvoiceInput — pure snapshot (ADR-0002/0009)", () => {
         unitPrice: 5000,
         vatRate: 2000,
         amount: 5000,
-        currency: "BGN",
+        currency: "EUR",
       },
       {
         position: 2,
@@ -130,7 +130,7 @@ describe("buildInvoiceInput — pure snapshot (ADR-0002/0009)", () => {
         unitPrice: 5000,
         vatRate: 2000,
         amount: 6000,
-        currency: "BGN",
+        currency: "EUR",
       },
     ]);
     // The Invoice is the financial subset (ADR-0009): no Mechanic leaks onto a line.
@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)("invoice service — integration (real Postgres, ADR-001
     // labor 1.5h @ 40 → 6000; part 1 @ 60 → 6000; net 12000; VAT 2400; gross 14400.
     expect(invoice.series).toBe("A");
     expect(invoice.number).toBe(1);
-    expect(invoice).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "BGN" });
+    expect(invoice).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "EUR" });
     expect(invoice.vatMode).toBe("registered");
     expect(invoice.sellerVatNumber).toBe("BG123456789");
     expect(invoice.customerName).toBe("Клиент");

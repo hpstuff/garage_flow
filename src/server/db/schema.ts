@@ -536,8 +536,8 @@ export const lineItem = pgTable("line_item", {
   vatRate: integer("vat_rate").notNull(),
   /** Net line total = round(quantity × unitPrice / 1000), in minor units; set on write. */
   amount: integer("amount").notNull(),
-  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
-  currency: text("currency").notNull().default("BGN"),
+  /** Explicit currency for the money columns (ADR-0011). */
+  currency: text("currency").notNull().default("EUR"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -695,8 +695,8 @@ export const invoiceLine = pgTable("invoice_line", {
   vatRate: integer("vat_rate").notNull(),
   /** Net line total in minor units — frozen at the value computed at issue. */
   amount: integer("amount").notNull(),
-  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
-  currency: text("currency").notNull().default("BGN"),
+  /** Explicit currency for the money columns (ADR-0011). */
+  currency: text("currency").notNull().default("EUR"),
 });
 
 export type InvoiceLineRow = typeof invoiceLine.$inferSelect;
@@ -739,8 +739,8 @@ export const payment = pgTable("payment", {
   method: paymentMethod("method").notNull().default("cash"),
   /** Optional free-text note (a reference number, a remark), never shown to the Customer. */
   note: text("note"),
-  /** Explicit currency, copied from the Invoice at record time (ADR-0011); BGN in the MVP. */
-  currency: text("currency").notNull().default("BGN"),
+  /** Explicit currency, copied from the Invoice at record time (ADR-0011). */
+  currency: text("currency").notNull().default("EUR"),
   /** When the Payment was recorded/received — the single timestamp the MVP needs. */
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -905,8 +905,8 @@ export const creditNoteLine = pgTable("credit_note_line", {
   vatRate: integer("vat_rate").notNull(),
   /** Net line total credited in minor units — frozen at the Invoice line's value. */
   amount: integer("amount").notNull(),
-  /** Explicit currency for the money columns (ADR-0011); BGN in the MVP. */
-  currency: text("currency").notNull().default("BGN"),
+  /** Explicit currency for the money columns (ADR-0011). */
+  currency: text("currency").notNull().default("EUR"),
 });
 
 export type CreditNoteLineRow = typeof creditNoteLine.$inferSelect;

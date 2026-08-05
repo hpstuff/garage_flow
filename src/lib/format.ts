@@ -9,7 +9,7 @@
 
 const LOCALE = "bg-BG";
 
-/** Render integer minor units (e.g. 12345 → "123,45 лв.") in the given currency. */
+/** Render integer minor units (e.g. 12345 → "€123,45") in the given currency. */
 export function formatMoney(minorUnits: number, currency: string): string {
   return new Intl.NumberFormat(LOCALE, {
     style: "currency",
