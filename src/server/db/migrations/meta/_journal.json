@@ -120,6 +120,13 @@
       "when": 1785868581848,
       "tag": "0016_add_hourly_rate_to_mechanic",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785955200000,
+      "tag": "0017_bgn_to_eur",
+      "breakpoints": true
     }
   ]
 }
