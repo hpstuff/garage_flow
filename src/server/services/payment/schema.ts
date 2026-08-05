@@ -8,7 +8,7 @@ import { PAYMENT_METHODS } from "../../db/schema";
  * the first two come from the `Scope`, and the currency is copied from the settled
  * Invoice by ScopedDb (ADR-0011), so a Payment can never disagree with its document.
  *
- * `amount` arrives from the form in **human units** (a major-unit sum, e.g. лв) and
+ * `amount` arrives from the form in **human units** (a major-unit sum, e.g. €) and
  * is coerced here so any transport is covered; the service turns it into the exact
  * integer minor units the schema stores. It must be strictly positive — a Payment
  * of zero settles nothing, and refunds are a future reversing entry, not a negative

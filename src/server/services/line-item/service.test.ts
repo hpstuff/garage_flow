@@ -49,23 +49,23 @@ describe("line item money math (pure, no DB)", () => {
 
   it("totals net, per-line-rounded VAT and gross from the lines when registered", () => {
     const items = [
-      { amount: 7500, vatRate: 2000, currency: "BGN" }, // VAT 1500
-      { amount: 5000, vatRate: 900, currency: "BGN" }, // VAT 450
-      { amount: 3000, vatRate: 0, currency: "BGN" }, // VAT 0
+      { amount: 7500, vatRate: 2000, currency: "EUR" }, // VAT 1500
+      { amount: 5000, vatRate: 900, currency: "EUR" }, // VAT 450
+      { amount: 3000, vatRate: 0, currency: "EUR" }, // VAT 0
     ] as ScopedLineItem[];
 
     const totals = computeRepairOrderTotals(items, REGISTERED);
     expect(totals.net).toBe(15500);
     expect(totals.vat).toBe(1950);
     expect(totals.gross).toBe(17450);
-    expect(totals.currency).toBe("BGN");
+    expect(totals.currency).toBe("EUR");
   });
 
   it("breaks net and gross down into Labor and Part subtotals (ADR-0009)", () => {
     const items = [
-      { type: "labor", amount: 7500, vatRate: 2000, currency: "BGN" }, // VAT 1500
-      { type: "labor", amount: 2500, vatRate: 2000, currency: "BGN" }, // VAT 500
-      { type: "part", amount: 3000, vatRate: 900, currency: "BGN" }, // VAT 270
+      { type: "labor", amount: 7500, vatRate: 2000, currency: "EUR" }, // VAT 1500
+      { type: "labor", amount: 2500, vatRate: 2000, currency: "EUR" }, // VAT 500
+      { type: "part", amount: 3000, vatRate: 900, currency: "EUR" }, // VAT 270
     ] as ScopedLineItem[];
 
     const totals = computeRepairOrderTotals(items, REGISTERED);
@@ -80,8 +80,8 @@ describe("line item money math (pure, no DB)", () => {
 
   it("carries laborGross/partsGross equal to their net when not registered (ADR-0006)", () => {
     const items = [
-      { type: "labor", amount: 7500, vatRate: 2000, currency: "BGN" },
-      { type: "part", amount: 3000, vatRate: 900, currency: "BGN" },
+      { type: "labor", amount: 7500, vatRate: 2000, currency: "EUR" },
+      { type: "part", amount: 3000, vatRate: 900, currency: "EUR" },
     ] as ScopedLineItem[];
 
     const totals = computeRepairOrderTotals(items, NOT_REGISTERED);
@@ -93,15 +93,15 @@ describe("line item money math (pure, no DB)", () => {
     // Same lines with non-zero VAT rates, but a not-registered Location means no
     // VAT applies at all: `vat` is null (not 0) and gross equals net.
     const items = [
-      { amount: 7500, vatRate: 2000, currency: "BGN" },
-      { amount: 5000, vatRate: 900, currency: "BGN" },
+      { amount: 7500, vatRate: 2000, currency: "EUR" },
+      { amount: 5000, vatRate: 900, currency: "EUR" },
     ] as ScopedLineItem[];
 
     const totals = computeRepairOrderTotals(items, NOT_REGISTERED);
     expect(totals.net).toBe(12500);
     expect(totals.vat).toBeNull();
     expect(totals.gross).toBe(12500);
-    expect(totals.currency).toBe("BGN");
+    expect(totals.currency).toBe("EUR");
   });
 
   it("is all zero for an order with no lines (registered → VAT 0)", () => {
@@ -113,7 +113,7 @@ describe("line item money math (pure, no DB)", () => {
       partsGross: 0,
       vat: 0,
       gross: 0,
-      currency: "BGN",
+      currency: "EUR",
     });
   });
 
@@ -126,7 +126,7 @@ describe("line item money math (pure, no DB)", () => {
       partsGross: 0,
       vat: null,
       gross: 0,
-      currency: "BGN",
+      currency: "EUR",
     });
   });
 });
@@ -304,7 +304,7 @@ describe.skipIf(!hasDb)("line item service — integration (real Postgres, ADR-0
     expect(created.unitPrice).toBe(5000); // minor units
     expect(created.vatRate).toBe(2000); // basis points
     expect(created.amount).toBe(7500); // 1.5h × 50.00
-    expect(created.currency).toBe("BGN");
+    expect(created.currency).toBe("EUR");
   });
 
   it("adds a Part line with quantity × unit price and no Mechanic", async () => {

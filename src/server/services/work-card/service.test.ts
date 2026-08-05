@@ -64,7 +64,7 @@ function fakeLine(overrides: Partial<ScopedLineItem> = {}): ScopedLineItem {
     unitPrice: 5000,
     vatRate: 2000,
     amount: 5000,
-    currency: "BGN",
+    currency: "EUR",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     updatedAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,

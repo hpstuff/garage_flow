@@ -87,7 +87,7 @@ export function computeRepairOrderTotals(
   const partItems = items.filter((item) => item.type === "part");
   const laborNet = laborItems.reduce((sum, item) => sum + item.amount, 0);
   const partsNet = partItems.reduce((sum, item) => sum + item.amount, 0);
-  const currency = items[0]?.currency ?? "BGN";
+  const currency = items[0]?.currency ?? "EUR";
 
   if (vatConfig.mode === "not_registered") {
     return {

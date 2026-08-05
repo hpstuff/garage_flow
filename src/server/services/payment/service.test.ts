@@ -44,18 +44,18 @@ function fakePayment(overrides: Partial<ScopedPayment> = {}): ScopedPayment {
     amount: 1000,
     method: "cash",
     note: null,
-    currency: "BGN",
+    currency: "EUR",
     createdAt: new Date("2026-01-01T00:00:00Z"),
     ...overrides,
   };
 }
 
-/** The Invoice header fields the summary reads — a 144,00 лв invoice. */
+/** The Invoice header fields the summary reads — a 144,00 € invoice. */
 const invoiceHeader: Pick<ScopedInvoice, "id" | "repairOrderId" | "gross" | "currency"> = {
   id: "inv-1",
   repairOrderId: "ro-1",
   gross: 14400,
-  currency: "BGN",
+  currency: "EUR",
 };
 
 describe("derivePaymentStatus — pure rule (ADR-0002)", () => {
@@ -89,7 +89,7 @@ describe("summarizePayments — pure settlement (ADR-0002)", () => {
       invoiceId: "inv-1",
       repairOrderId: "ro-1",
       gross: 14400,
-      currency: "BGN",
+      currency: "EUR",
       totalPaid: 0,
       balance: 14400,
       status: "unpaid",
@@ -239,7 +239,7 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
     const { orderId, invoice } = await invoiceOrder(accountA, locationA);
     expect(invoice.gross).toBe(14400);
 
-    // First partial: 100,00 лв of 144,00.
+    // First partial: €100.00 of €144.00.
     const afterFirst = await recordPayment(s, {
       invoiceId: invoice.id,
       amount: 100,
@@ -250,7 +250,7 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
     expect(afterFirst.status).toBe("partially_paid");
     expect((await getRepairOrder(s, { id: orderId })).paymentStatus).toBe("partially_paid");
 
-    // Second partial settles the rest: 44,00 лв.
+    // Second partial settles the rest: €44.00.
     const afterSecond = await recordPayment(s, {
       invoiceId: invoice.id,
       amount: 44,
@@ -304,7 +304,7 @@ describe.skipIf(!hasDb)("payment service — integration (real Postgres, ADR-001
       amount: 2000,
       method: "bank_transfer",
       note: "нареждане",
-      currency: "BGN",
+      currency: "EUR",
     });
   });
 

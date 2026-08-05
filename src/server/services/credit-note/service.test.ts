@@ -34,7 +34,7 @@ import {
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
 
-/** A minimal issued-Invoice projection — the fields the snapshot copies. A 144,00 лв invoice. */
+/** A minimal issued-Invoice projection — the fields the snapshot copies. A 144,00 € invoice. */
 function fakeInvoice(overrides: Partial<ScopedInvoice> = {}): ScopedInvoice {
   return {
     id: "inv-1",
@@ -49,7 +49,7 @@ function fakeInvoice(overrides: Partial<ScopedInvoice> = {}): ScopedInvoice {
     net: 12000,
     vat: 2400,
     gross: 14400,
-    currency: "BGN",
+    currency: "EUR",
     lines: [
       {
         id: "il-1",
@@ -60,7 +60,7 @@ function fakeInvoice(overrides: Partial<ScopedInvoice> = {}): ScopedInvoice {
         unitPrice: 4000,
         vatRate: 2000,
         amount: 6000,
-        currency: "BGN",
+        currency: "EUR",
       },
       {
         id: "il-2",
@@ -71,7 +71,7 @@ function fakeInvoice(overrides: Partial<ScopedInvoice> = {}): ScopedInvoice {
         unitPrice: 6000,
         vatRate: 2000,
         amount: 6000,
-        currency: "BGN",
+        currency: "EUR",
       },
     ],
     ...overrides,
@@ -98,7 +98,7 @@ describe("buildCreditNoteInput — pure snapshot (ADR-0002)", () => {
     expect(input.vehiclePlate).toBe("CA1234AB");
     expect(input.reason).toBe("Върнати накладки");
     // Amounts are copied from the Invoice, never recomputed.
-    expect(input).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "BGN" });
+    expect(input).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "EUR" });
   });
 
   it("copies each frozen Invoice line in order, keeping its position", () => {
@@ -113,7 +113,7 @@ describe("buildCreditNoteInput — pure snapshot (ADR-0002)", () => {
         unitPrice: 4000,
         vatRate: 2000,
         amount: 6000,
-        currency: "BGN",
+        currency: "EUR",
       },
       {
         position: 2,
@@ -123,7 +123,7 @@ describe("buildCreditNoteInput — pure snapshot (ADR-0002)", () => {
         unitPrice: 6000,
         vatRate: 2000,
         amount: 6000,
-        currency: "BGN",
+        currency: "EUR",
       },
     ]);
   });
@@ -277,7 +277,7 @@ describe.skipIf(!hasDb)("credit note service — integration (real Postgres, ADR
     expect(note.invoiceNumber).toBe(invoice.number);
     expect(note.reason).toBe("Върнати части");
     // Mirrors the Invoice's amounts and lines exactly.
-    expect(note).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "BGN" });
+    expect(note).toMatchObject({ net: 12000, vat: 2400, gross: 14400, currency: "EUR" });
     expect(note.customerName).toBe("Клиент");
     expect(note.vehiclePlate).toBe("CA1234AB");
     expect(note.lines.map((l) => l.position)).toEqual([1, 2]);
