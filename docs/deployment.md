@@ -4,6 +4,12 @@
 
 GarageFlow ships as a single Dockerfile with a multi-stage build. Deploy on Coolify by pointing it at this repo and letting it use the default `Dockerfile` in the root.
 
+### GitHub Actions deploy button
+
+A manual-deploy action lives in `.github/workflows/deploy.yml`. It builds your image, pushes to GHCR (`ghcr.io/<repo>:<sha>`), then fires a Coolify rebuild webhook — all triggered from the **Actions tab → "Deploy" → Run Workflow**. No CI pipeline required.
+
+**Setup:** add a `COOLIFY_WEBHOOK` secret in GitHub (Settings → Secrets) with your Coolify rebuild URL, then hit run whenever you want to deploy.
+
 ### Steps
 
 1. **Add your app to Coolify** — select this Git repository and pick the root directory (`/`).
