@@ -80,6 +80,15 @@ export const location = pgTable("location", {
    * by default (every stage shown).
    */
   hiddenStages: kanbanStage("hidden_stages").array().notNull().default([]),
+  /**
+   * Working schedule (GF-20). JSON column storing the location's weekly hours and date exceptions.
+   * Default is Mon-Fri 09:00-18:00, Sat-Sun closed. See {@link ScheduleConfig} in `src/lib/schedule.ts`.
+   */
+  workingSchedule: text("working_schedule")
+    .notNull()
+    .default(
+      '{"weekly":{"mon":{"start":"09:00","end":"18:00"},"tue":{"start":"09:00","end":"18:00"},"wed":{"start":"09:00","end":"18:00"},"thu":{"start":"09:00","end":"18:00"},"fri":{"start":"09:00","end":"18:00"},"sat":null,"sun":null},"exceptions":[]}',
+    ),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
