@@ -9,6 +9,7 @@
  */
 
 import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
+import type { ScheduleConfig } from "@/lib/schedule";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
@@ -64,6 +65,20 @@ export interface VatSettingsWriteValues {
   mode: VatMode;
   rate: number;
   vatNumber: string | null;
+}
+
+/**
+ * The current Location's working schedule (GF-20) — the raw JSON column as-is.
+ * Parsed by the service into a {@link ScheduleConfig} value object.
+ */
+export interface ScopedScheduleSettings {
+  config: ScheduleConfig;
+}
+
+/** The schedule values a caller may write — scope-derived columns are never here. */
+export interface ScheduleWriteValues {
+  weekly: Record<number, { start: string; end: string } | null>;
+  exceptions: Array<{ date: string; closed: boolean; hours?: { start: string; end: string } }>;
 }
 
 /** A Customer as it crosses the service boundary — an explicit, safe projection. */
@@ -825,6 +840,45 @@ export class ScopedDb {
       throw new NotFoundError("Location not found for the current scope");
     }
     return row;
+  }
+
+  /**
+   * The current Location's working schedule (GF-20). Scoped by `accountId` +
+   * `locationId`, so one Account can never read another's schedule configuration.
+   */
+  async getScheduleSettings(): Promise<ScopedScheduleSettings> {
+    const rows = await this.#db
+      .select({ config: location.workingSchedule })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return { config: (row.config ? JSON.parse(row.config) : {}) as ScheduleConfig };
+  }
+
+  /**
+   * Replace the current Location's working schedule (GF-20). Scoped by `accountId` +
+   * `locationId`, so one Account can never write another's schedule configuration.
+   */
+  async setScheduleSettings(values: ScheduleWriteValues): Promise<ScopedScheduleSettings> {
+    const rows = await this.#db
+      .update(location)
+      .set({
+        workingSchedule: JSON.stringify(values),
+        updatedAt: new Date(),
+      })
+      .where(this.#locationScope())
+      .returning({ config: location.workingSchedule });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return { config: values as ScheduleConfig };
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
