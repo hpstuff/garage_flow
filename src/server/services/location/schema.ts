@@ -46,3 +46,58 @@ export const setVatConfigSchema = z
   })
   .strict();
 export type SetVatConfigInput = z.infer<typeof setVatConfigSchema>;
+
+/**
+ * Schedule config input schemas (GF-20). Validation is authoritative in the
+ * service, so every transport is protected — not just the web form.
+ */
+
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+/** A single day's hours: two local-time strings in "HH:mm" format. */
+const timeRangeSchema = z
+  .object({
+    start: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, "Форматът трябва да е ЧЧ:ММ.")
+      .transform((v) => v as `${string}:${string}`),
+    end: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, "Форматът трябва да е ЧЧ:ММ.")
+      .transform((v) => v as `${string}:${string}`),
+  })
+  .refine(
+    (value) => {
+      const partsStart = value.start.split(":").map(Number);
+      const partsEnd = value.end.split(":").map(Number);
+      const sh = partsStart[0]!;
+      const sm = partsStart[1]!;
+      const eh = partsEnd[0]!;
+      const em = partsEnd[1]!;
+      return eh * 60 + em > sh * 60 + sm; // end must be after start
+    },
+    { message: "Краят трябва да е след началото." },
+  );
+
+/** A single date exception. */
+const dateExceptionSchema = z
+  .object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Форматът на датата трябва да е ГГГГ-ММ-ДД.")
+      .transform((v) => v as `${string}-${string}-${string}`),
+    closed: z.boolean(),
+    hours: timeRangeSchema.optional(),
+  })
+  .refine((value) => !value.closed || value.hours === undefined, {
+    message: "Затворените дни не трябва да имат часове.",
+  });
+
+/** The full schedule config input. */
+export const setScheduleConfigSchema = z
+  .object({
+    weekly: z.record(z.enum(DAY_KEYS), timeRangeSchema.nullable()),
+    exceptions: z.array(dateExceptionSchema).optional().default([]),
+  })
+  .strict();
+export type SetScheduleConfigInput = z.infer<typeof setScheduleConfigSchema>;

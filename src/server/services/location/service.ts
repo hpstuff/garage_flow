@@ -14,11 +14,12 @@
  */
 
 import { z } from "zod";
+import { DEFAULT_SCHEDULE, type ScheduleConfig } from "../../../lib/schedule";
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
 import { type Scope, scoped } from "../../db";
-import type { ScopedVatSettings } from "../../db/scoped-db";
+import type { ScopedScheduleSettings, ScopedVatSettings } from "../../db/scoped-db";
 import { ValidationError } from "../../domain/errors";
-import { setVatConfigSchema } from "./schema";
+import { setScheduleConfigSchema, setVatConfigSchema } from "./schema";
 
 // The VAT constants/types are transport-free (src/lib/vat) so client components
 // can import them too; re-exported here for server-side ergonomics (GF-12).
@@ -64,4 +65,23 @@ export async function setVatConfig(scope: Scope, input: unknown): Promise<VatCon
     vatNumber: mode === "registered" ? vatNumber : null,
   });
   return toVatConfig(saved);
+}
+
+/** The current Location's working schedule (GF-20). Returns the {@link ScheduleConfig} value object. */
+export async function getScheduleConfig(scope: Scope): Promise<ScheduleConfig> {
+  const raw = await scoped(scope).getScheduleSettings();
+  return raw.config;
+}
+
+/**
+ * Update the current Location's working schedule (GF-20). Validates input and persists it.
+ */
+export async function setScheduleConfig(scope: Scope, input: unknown): Promise<ScheduleConfig> {
+  const parsed = setScheduleConfigSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError("Invalid schedule config", z.flattenError(parsed.error).fieldErrors);
+  }
+
+  const saved = await scoped(scope).setScheduleSettings(parsed.data);
+  return saved.config;
 }
