@@ -14,10 +14,8 @@
  */
 
 import { z } from "zod";
-import { DEFAULT_SCHEDULE, type ScheduleConfig } from "../../../lib/schedule";
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
 import { type Scope, scoped } from "../../db";
-import type { ScopedScheduleSettings, ScopedVatSettings } from "../../db/scoped-db";
 import { ValidationError } from "../../domain/errors";
 import { setScheduleConfigSchema, setVatConfigSchema } from "./schema";
 

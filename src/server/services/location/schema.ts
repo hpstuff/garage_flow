@@ -68,13 +68,9 @@ const timeRangeSchema = z
   })
   .refine(
     (value) => {
-      const partsStart = value.start.split(":").map(Number);
-      const partsEnd = value.end.split(":").map(Number);
-      const sh = partsStart[0]!;
-      const sm = partsStart[1]!;
-      const eh = partsEnd[0]!;
-      const em = partsEnd[1]!;
-      return eh * 60 + em > sh * 60 + sm; // end must be after start
+      const [sh, sm] = value.start.split(":").map(Number);
+      const [eh, em] = value.end.split(":").map(Number);
+      return eh! * 60 + em! > sh! * 60 + sm!; // end must be after start
     },
     { message: "Краят трябва да е след началото." },
   );
