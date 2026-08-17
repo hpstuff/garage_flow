@@ -81,6 +81,12 @@ function isoToWeekday(isoDate: IsoDate): Weekday | null {
   return (jsDay === 0 ? 7 : jsDay) as Weekday;
 }
 
+/** Minutes since midnight for a local "HH:mm" time string. */
+function timeToMinutes(time: string): number {
+  const [hours = 0, minutes = 0] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
 /**
  * Whether an appointment slot falls within the location's configured hours for its date.
  * Returns `null` when allowed, or an error message string when blocked.
@@ -95,14 +101,8 @@ export function validateAppointmentWithinSchedule(
   const slotStartMinutes = appointment.startsAt.getHours() * 60 + appointment.startsAt.getMinutes();
   const slotEndMinutes = appointment.endsAt.getHours() * 60 + appointment.endsAt.getMinutes();
 
-  const openParts = dayHours.start.split(":").map(Number);
-  const closeParts = dayHours.end.split(":").map(Number);
-  const openH = openParts[0]!;
-  const openM = openParts[1]!;
-  const closeH = closeParts[0]!;
-  const closeM = closeParts[1]!;
-  const openMinutes = openH * 60 + openM;
-  const closeMinutes = closeH * 60 + closeM;
+  const openMinutes = timeToMinutes(dayHours.start);
+  const closeMinutes = timeToMinutes(dayHours.end);
 
   if (slotStartMinutes < openMinutes || slotEndMinutes > closeMinutes) {
     return `The location is not open at this time. Open ${dayHours.start}–${dayHours.end}.`;

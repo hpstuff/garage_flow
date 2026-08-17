@@ -54,6 +54,12 @@ export type SetVatConfigInput = z.infer<typeof setVatConfigSchema>;
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
+/** Minutes since midnight for a local "HH:mm" time string (already regex-validated). */
+function timeToMinutes(time: string): number {
+  const [hours = 0, minutes = 0] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
 /** A single day's hours: two local-time strings in "HH:mm" format. */
 const timeRangeSchema = z
   .object({
@@ -67,12 +73,10 @@ const timeRangeSchema = z
       .transform((v) => v as `${string}:${string}`),
   })
   .refine(
-    (value) => {
-      const [sh, sm] = value.start.split(":").map(Number);
-      const [eh, em] = value.end.split(":").map(Number);
-      return eh! * 60 + em! > sh! * 60 + sm!; // end must be after start
+    (value) => timeToMinutes(value.end) > timeToMinutes(value.start), // end must be after start
+    {
+      message: "Краят трябва да е след началото.",
     },
-    { message: "Краят трябва да е след началото." },
   );
 
 /** A single date exception. */

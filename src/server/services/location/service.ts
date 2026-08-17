@@ -14,11 +14,11 @@
  */
 
 import { z } from "zod";
+import type { ScheduleConfig } from "../../../lib/schedule";
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
-import { type Scope, scoped, type ScopedVatSettings } from "../../db";
+import { type Scope, type ScopedVatSettings, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
 import { setScheduleConfigSchema, setVatConfigSchema } from "./schema";
-import type { ScheduleConfig } from "../../../lib/schedule";
 
 // The VAT constants/types are transport-free (src/lib/vat) so client components
 // can import them too; re-exported here for server-side ergonomics (GF-12).
