@@ -869,6 +869,26 @@ export class ScopedDb {
   }
 
   /**
+   * Whether schedule enforcement applies at all (GF-20) — a single-column read,
+   * cheaper than {@link getScheduleSettings} for call sites (like the app shell's
+   * nav) that only need the flag, not the weekly hours/exceptions. Scoped by
+   * `accountId` + `locationId`, so one Account can never read another's flag.
+   */
+  async getScheduleEnabled(): Promise<boolean> {
+    const rows = await this.#db
+      .select({ enabled: location.scheduleEnabled })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
+  }
+
+  /**
    * Replace the current Location's working schedule (GF-20). Scoped by `accountId` +
    * `locationId`, so one Account can never write another's schedule configuration.
    */

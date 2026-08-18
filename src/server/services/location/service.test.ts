@@ -20,6 +20,7 @@ import { NotFoundError, ValidationError } from "../../domain/errors";
 import {
   getScheduleConfig,
   getVatConfig,
+  isScheduleEnabled,
   setScheduleConfig,
   setScheduleEnabled,
   setVatConfig,
@@ -242,11 +243,13 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
 
     const disabled = await setScheduleEnabled(scope(accountA, locationA), { enabled: false });
     expect(disabled).toBe(false);
+    expect(await isScheduleEnabled(scope(accountA, locationA))).toBe(false);
     const afterDisable = await getScheduleConfig(scope(accountA, locationA));
     expect(afterDisable).toEqual({ ...before, enabled: false });
 
     const reenabled = await setScheduleEnabled(scope(accountA, locationA), { enabled: true });
     expect(reenabled).toBe(true);
+    expect(await isScheduleEnabled(scope(accountA, locationA))).toBe(true);
     expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(before);
   });
 
@@ -259,5 +262,6 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     await expect(setScheduleEnabled(forged, { enabled: false })).rejects.toBeInstanceOf(
       NotFoundError,
     );
+    await expect(isScheduleEnabled(forged)).rejects.toBeInstanceOf(NotFoundError);
   });
 });

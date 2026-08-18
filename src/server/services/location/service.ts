@@ -73,6 +73,15 @@ export async function getScheduleConfig(scope: Scope): Promise<ScheduleConfig> {
 }
 
 /**
+ * Whether schedule enforcement applies at all (GF-20) — a cheap single-column
+ * read for call sites (like the app shell's nav) that only need the flag, not
+ * the full weekly hours/exceptions {@link getScheduleConfig} returns.
+ */
+export async function isScheduleEnabled(scope: Scope): Promise<boolean> {
+  return scoped(scope).getScheduleEnabled();
+}
+
+/**
  * Update the current Location's working schedule (GF-20). Validates input and persists it.
  */
 export async function setScheduleConfig(scope: Scope, input: unknown): Promise<ScheduleConfig> {
