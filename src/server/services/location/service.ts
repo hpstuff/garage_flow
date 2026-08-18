@@ -14,11 +14,11 @@
  */
 
 import { z } from "zod";
+import { configFromInput, parseStoredConfig, type ScheduleConfig } from "../../../lib/schedule";
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
-import { type Scope, scoped } from "../../db";
-import type { ScopedVatSettings } from "../../db/scoped-db";
+import { type Scope, type ScopedVatSettings, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
-import { setVatConfigSchema } from "./schema";
+import { setScheduleConfigSchema, setScheduleEnabledSchema, setVatConfigSchema } from "./schema";
 
 // The VAT constants/types are transport-free (src/lib/vat) so client components
 // can import them too; re-exported here for server-side ergonomics (GF-12).
@@ -64,4 +64,59 @@ export async function setVatConfig(scope: Scope, input: unknown): Promise<VatCon
     vatNumber: mode === "registered" ? vatNumber : null,
   });
   return toVatConfig(saved);
+}
+
+/** The current Location's working schedule (GF-20). Returns the {@link ScheduleConfig} value object. */
+export async function getScheduleConfig(scope: Scope): Promise<ScheduleConfig> {
+  const raw = await scoped(scope).getScheduleSettings();
+  return toScheduleConfig(raw.config, raw.enabled);
+}
+
+/**
+ * Whether schedule enforcement applies at all (GF-20) — a cheap single-column
+ * read for call sites (like the app shell's nav) that only need the flag, not
+ * the full weekly hours/exceptions {@link getScheduleConfig} returns.
+ */
+export async function isScheduleEnabled(scope: Scope): Promise<boolean> {
+  return scoped(scope).getScheduleEnabled();
+}
+
+/**
+ * Update the current Location's working schedule (GF-20). Validates input and persists it.
+ */
+export async function setScheduleConfig(scope: Scope, input: unknown): Promise<ScheduleConfig> {
+  const parsed = setScheduleConfigSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError("Invalid schedule config", z.flattenError(parsed.error).fieldErrors);
+  }
+
+  const config = configFromInput(parsed.data);
+  await scoped(scope).setScheduleSettings(config);
+  return config;
+}
+
+/**
+ * Turn schedule enforcement on/off (GF-20) without touching the weekly hours or
+ * exceptions already on file — some garages don't want the feature at all, and
+ * hiding it shouldn't discard hours they'd already configured.
+ */
+export async function setScheduleEnabled(scope: Scope, input: unknown): Promise<boolean> {
+  const parsed = setScheduleEnabledSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      "Invalid schedule enabled flag",
+      z.flattenError(parsed.error).fieldErrors,
+    );
+  }
+
+  return scoped(scope).setScheduleEnabled(parsed.data.enabled);
+}
+
+/**
+ * Shape the raw stored weekly schedule into the canonical {@link ScheduleConfig} (GF-20):
+ * missing days fall back to the default hours so readers and slot validation always
+ * see a complete weekly map.
+ */
+function toScheduleConfig(raw: unknown, enabled: boolean): ScheduleConfig {
+  return parseStoredConfig(raw, enabled);
 }

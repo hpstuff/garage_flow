@@ -13,4 +13,5 @@ export function scoped(scope: Scope): ScopedDb {
 }
 
 export type { ResolvedSession, Role, Scope } from "./scope";
+export type { ScopedVatSettings } from "./scoped-db";
 export { ScopedDb } from "./scoped-db";

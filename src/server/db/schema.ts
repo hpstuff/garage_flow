@@ -8,7 +8,16 @@
  * and reached only through ScopedDb (ADR-0013).
  */
 
-import { integer, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { DEFAULT_VAT_RATE, VAT_MODES } from "../../lib/vat";
 import { organization, user } from "./auth-schema";
 
@@ -80,6 +89,21 @@ export const location = pgTable("location", {
    * by default (every stage shown).
    */
   hiddenStages: kanbanStage("hidden_stages").array().notNull().default([]),
+  /**
+   * Working schedule (GF-20). JSON column storing the location's weekly hours and date exceptions.
+   * Default is Mon-Fri 09:00-18:00, Sat-Sun closed. See {@link ScheduleConfig} in `src/lib/schedule.ts`.
+   */
+  workingSchedule: text("working_schedule")
+    .notNull()
+    .default(
+      '{"weekly":{"mon":{"start":"09:00","end":"18:00"},"tue":{"start":"09:00","end":"18:00"},"wed":{"start":"09:00","end":"18:00"},"thu":{"start":"09:00","end":"18:00"},"fri":{"start":"09:00","end":"18:00"},"sat":null,"sun":null},"exceptions":[]}',
+    ),
+  /**
+   * Whether working-schedule enforcement applies at all (GF-20). Some garages
+   * don't want business-hours restrictions; defaults to `true` so every
+   * existing Location keeps the enforcement it already had.
+   */
+  scheduleEnabled: boolean("schedule_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

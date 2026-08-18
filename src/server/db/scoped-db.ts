@@ -9,6 +9,7 @@
  */
 
 import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
+import type { DateException, TimeRange, Weekday } from "@/lib/schedule";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
@@ -64,6 +65,28 @@ export interface VatSettingsWriteValues {
   mode: VatMode;
   rate: number;
   vatNumber: string | null;
+}
+
+/**
+ * The current Location's working schedule (GF-20) — the raw `working_schedule`
+ * JSON value plus the `schedule_enabled` flag, before the service parses them
+ * into a {@link ScheduleConfig}.
+ */
+export interface ScopedScheduleSettings {
+  /** Whether schedule enforcement applies at all — its own column, not part of the JSON. */
+  enabled: boolean;
+  /** The raw stored JSON; shape is not guaranteed (legacy rows), so the service parses it. */
+  config: unknown;
+}
+
+/**
+ * The canonical {@link ScheduleConfig} persisted on the Location (GF-20).
+ * Scope-derived columns are never here.
+ */
+export interface ScheduleWriteValues {
+  enabled: boolean;
+  weekly: Record<Weekday, TimeRange | null>;
+  exceptions: DateException[];
 }
 
 /** A Customer as it crosses the service boundary — an explicit, safe projection. */
@@ -825,6 +848,87 @@ export class ScopedDb {
       throw new NotFoundError("Location not found for the current scope");
     }
     return row;
+  }
+
+  /**
+   * The current Location's working schedule (GF-20). Scoped by `accountId` +
+   * `locationId`, so one Account can never read another's schedule configuration.
+   */
+  async getScheduleSettings(): Promise<ScopedScheduleSettings> {
+    const rows = await this.#db
+      .select({ config: location.workingSchedule, enabled: location.scheduleEnabled })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return { enabled: row.enabled, config: row.config ? JSON.parse(row.config) : {} };
+  }
+
+  /**
+   * Whether schedule enforcement applies at all (GF-20) — a single-column read,
+   * cheaper than {@link getScheduleSettings} for call sites (like the app shell's
+   * nav) that only need the flag, not the weekly hours/exceptions. Scoped by
+   * `accountId` + `locationId`, so one Account can never read another's flag.
+   */
+  async getScheduleEnabled(): Promise<boolean> {
+    const rows = await this.#db
+      .select({ enabled: location.scheduleEnabled })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
+  }
+
+  /**
+   * Replace the current Location's working schedule (GF-20). Scoped by `accountId` +
+   * `locationId`, so one Account can never write another's schedule configuration.
+   */
+  async setScheduleSettings(values: ScheduleWriteValues): Promise<ScopedScheduleSettings> {
+    const { enabled, ...config } = values;
+    const rows = await this.#db
+      .update(location)
+      .set({
+        workingSchedule: JSON.stringify(config),
+        scheduleEnabled: enabled,
+        updatedAt: new Date(),
+      })
+      .where(this.#locationScope())
+      .returning({ config: location.workingSchedule, enabled: location.scheduleEnabled });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return { enabled, config: config as unknown };
+  }
+
+  /**
+   * Turn schedule enforcement on/off without touching the stored weekly hours or
+   * exceptions (GF-20) — some garages don't want the feature at all, and toggling
+   * it shouldn't discard hours they'd already configured. Scoped by `accountId` +
+   * `locationId`, so one Account can never touch another's schedule configuration.
+   */
+  async setScheduleEnabled(enabled: boolean): Promise<boolean> {
+    const rows = await this.#db
+      .update(location)
+      .set({ scheduleEnabled: enabled, updatedAt: new Date() })
+      .where(this.#locationScope())
+      .returning({ enabled: location.scheduleEnabled });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
