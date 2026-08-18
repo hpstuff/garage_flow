@@ -116,6 +116,8 @@ const exceptionInputSchema = z
 /** The full schedule config input — every weekday explicit, exceptions a plain list. */
 export const setScheduleConfigSchema = z
   .object({
+    /** Whether schedule enforcement applies at all; `false` means no restriction, ever. */
+    enabled: z.boolean(),
     weekly: z
       .object({
         mon: scheduleDayInputSchema,

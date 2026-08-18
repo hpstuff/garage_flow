@@ -69,7 +69,7 @@ export async function setVatConfig(scope: Scope, input: unknown): Promise<VatCon
 /** The current Location's working schedule (GF-20). Returns the {@link ScheduleConfig} value object. */
 export async function getScheduleConfig(scope: Scope): Promise<ScheduleConfig> {
   const raw = await scoped(scope).getScheduleSettings();
-  return toScheduleConfig(raw.config);
+  return toScheduleConfig(raw.config, raw.enabled);
 }
 
 /**
@@ -91,6 +91,6 @@ export async function setScheduleConfig(scope: Scope, input: unknown): Promise<S
  * missing days fall back to the default hours so readers and slot validation always
  * see a complete weekly map.
  */
-function toScheduleConfig(raw: unknown): ScheduleConfig {
-  return parseStoredConfig(raw);
+function toScheduleConfig(raw: unknown, enabled: boolean): ScheduleConfig {
+  return parseStoredConfig(raw, enabled);
 }

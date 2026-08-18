@@ -56,6 +56,8 @@ export interface ExceptionInput {
  * optional rather than `null`.
  */
 export interface ScheduleConfigInput {
+  /** Whether schedule enforcement applies at all (GF-20). `false` means no restriction, ever. */
+  enabled: boolean;
   weekly: WeeklyInput;
   exceptions: ExceptionInput[];
 }
@@ -72,14 +74,21 @@ export interface DateException {
 
 /** The top-level working calendar configuration value object. */
 export interface ScheduleConfig {
+  /**
+   * Whether schedule enforcement applies at all (GF-20). Some garages don't
+   * want business-hours restrictions; when `false`, {@link validateAppointmentWithinSchedule}
+   * allows any time regardless of `weekly`/`exceptions`.
+   */
+  enabled: boolean;
   /** Weekly defaults keyed by ISO weekday number (1=Monday … 7=Sunday). `null` means closed that day. */
   weekly: Record<Weekday, WeekdayConfig>;
   /** Date-specific overrides applied in priority over the weekly default for that date. */
   exceptions: DateException[];
 }
 
-/** Default schedule: Mon-Fri 09:00-18:00, Sat-Sun closed. */
+/** Default schedule: enabled, Mon-Fri 09:00-18:00, Sat-Sun closed. */
 export const DEFAULT_SCHEDULE: ScheduleConfig = {
+  enabled: true,
   weekly: {
     1: { start: "09:00", end: "18:00" },
     2: { start: "09:00", end: "18:00" },
@@ -134,6 +143,9 @@ export function validateAppointmentWithinSchedule(
   appointment: { startsAt: Date; endsAt: Date },
   scheduleConfig: ScheduleConfig | null,
 ): string | null {
+  // A Location that has turned enforcement off entirely (GF-20) has no restricted hours.
+  if (scheduleConfig && !scheduleConfig.enabled) return null;
+
   const dayHours = getDayHours(scheduleConfig, toDateParam(appointment.startsAt));
   if (!dayHours) return "The location is closed on this date.";
 
@@ -186,7 +198,7 @@ export function configFromInput(input: ScheduleConfigInput): ScheduleConfig {
       ? { date: e.date as IsoDate, closed: true }
       : { date: e.date as IsoDate, closed: false, hours: e.hours ?? undefined },
   );
-  return { weekly, exceptions };
+  return { enabled: input.enabled, weekly, exceptions };
 }
 
 /**
@@ -194,10 +206,12 @@ export function configFromInput(input: ScheduleConfigInput): ScheduleConfig {
  * Accepts both the persisted ISO-weekday-numbered form (`"1"`–`"7"`) and the legacy
  * `mon..sun` keyed form; every day gets an explicit value. Unknown day keys and
  * partially written rows fall back to the {@link DEFAULT_SCHEDULE} for that day, so
- * a malformed stored row never crashes consumers.
+ * a malformed stored row never crashes consumers. `enabled` doesn't live in the JSON
+ * itself (it's the Location's own `schedule_enabled` column), so it's passed in.
  */
-export function parseStoredConfig(stored: unknown): ScheduleConfig {
+export function parseStoredConfig(stored: unknown, enabled: boolean): ScheduleConfig {
   const defaults = configFromInput({
+    enabled,
     weekly: DEFAULT_WEEKLY_INPUT,
     exceptions: [],
   });
@@ -234,7 +248,7 @@ export function parseStoredConfig(stored: unknown): ScheduleConfig {
         : { date: e.date as IsoDate, closed: false, hours: e.hours },
     );
 
-  return { weekly, exceptions };
+  return { enabled, weekly, exceptions };
 }
 
 /** `"mon"` → ISO weekday number (1 = Monday … 7 = Sunday); `null` for unknown keys. */
