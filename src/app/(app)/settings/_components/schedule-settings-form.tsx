@@ -22,7 +22,7 @@ type DayKey = (typeof DAYS)[number];
 /** Render a stored (ISO-weekday-keyed) config back into the flat form shape. */
 function toFormInput(config: ScheduleConfig | null): ScheduleConfigInput {
   if (!config) {
-    return { weekly: { ...DEFAULT_WEEKLY_INPUT }, exceptions: [] };
+    return { enabled: true, weekly: { ...DEFAULT_WEEKLY_INPUT }, exceptions: [] };
   }
   const weekly: WeeklyInput = {} as WeeklyInput;
   for (const [index, dayKey] of DAYS.entries()) {
@@ -37,7 +37,7 @@ function toFormInput(config: ScheduleConfig | null): ScheduleConfigInput {
     closed: e.closed,
     hours: e.closed ? null : (e.hours ?? null),
   }));
-  return { weekly, exceptions };
+  return { enabled: config.enabled, weekly, exceptions };
 }
 
 type DayErrors = Record<string, string | undefined>;
@@ -57,6 +57,7 @@ export function ScheduleSettingsForm({ config }: { config: ScheduleConfig | null
   const t = useTranslations("settings.schedule");
 
   const initial = toFormInput(config);
+  const [enabled, setEnabled] = useState(initial.enabled);
   const [weekly, setWeekly] = useState<WeeklyInput>(initial.weekly);
   const [exceptions, setExceptions] = useState<ExceptionInput[]>(initial.exceptions);
 
@@ -106,6 +107,13 @@ export function ScheduleSettingsForm({ config }: { config: ScheduleConfig | null
 
   /** Mirrors the service's Zod invariants so the common mistakes surface inline before the round trip. */
   function validate(): boolean {
+    if (!enabled) {
+      setDayErrors({});
+      setExceptionErrors({});
+      setFormError(null);
+      return true;
+    }
+
     const nextDayErrors: DayErrors = {};
     for (const day of DAYS) {
       const row = weekly[day];
@@ -145,7 +153,7 @@ export function ScheduleSettingsForm({ config }: { config: ScheduleConfig | null
     setPending(true);
     setFormError(null);
 
-    const result = await setScheduleConfigAction({ weekly, exceptions });
+    const result = await setScheduleConfigAction({ enabled, weekly, exceptions });
 
     if (result.ok) {
       setSaved(true);
@@ -159,142 +167,167 @@ export function ScheduleSettingsForm({ config }: { config: ScheduleConfig | null
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-medium">{t("weeklyLabel")}</legend>
-        <p className="text-sm text-muted-foreground">{t("weeklyHint")}</p>
-        <div className="space-y-2">
-          {DAYS.map((day) => {
-            const row = weekly[day];
-            const error = dayError(dayErrors, day);
-            return (
-              <div
-                key={day}
-                className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
-              >
-                <label
-                  htmlFor={`schedule-day-${day}`}
-                  className="flex w-36 shrink-0 items-center gap-2 text-sm font-medium"
-                >
-                  <Checkbox
-                    id={`schedule-day-${day}`}
-                    checked={row.open}
-                    onCheckedChange={(checked) => toggleDayOpen(day, checked === true)}
-                  />
-                  {t(`days.${day}`)}
-                </label>
-                {row.open ? (
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
-                    <Field label={t("start")} className="w-32">
-                      <Input
-                        type="time"
-                        value={row.start ?? ""}
-                        onChange={(e) => updateDay(day, { start: e.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("end")} className="w-32">
-                      <Input
-                        type="time"
-                        value={row.end ?? ""}
-                        onChange={(e) => updateDay(day, { end: e.target.value })}
-                      />
-                    </Field>
-                  </div>
-                ) : null}
-                {error ? (
-                  <p className="w-full text-sm font-medium text-destructive">{error}</p>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </fieldset>
+      <div className="flex items-start gap-3 rounded-lg border border-border p-3">
+        <Checkbox
+          id="schedule-enabled"
+          className="mt-0.5"
+          checked={enabled}
+          onCheckedChange={(checked) => {
+            setEnabled(checked === true);
+            markDirty();
+          }}
+        />
+        <label htmlFor="schedule-enabled" className="space-y-0.5">
+          <span className="block text-sm font-medium">{t("enabled")}</span>
+          <span className="block text-sm text-muted-foreground">{t("enabledHint")}</span>
+        </label>
+      </div>
 
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-medium">{t("exceptions.title")}</legend>
-        <p className="text-sm text-muted-foreground">{t("exceptions.hint")}</p>
-
-        {exceptions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("exceptions.empty")}</p>
-        ) : (
-          <div className="space-y-2">
-            {exceptions.map((exception, index) => {
-              const error = dayError(exceptionErrors, String(index));
-              return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: rows are fully controlled by index, no per-row local state
-                <div key={index} className="space-y-2 rounded-lg border border-border p-3">
-                  <div className="flex flex-wrap items-end gap-3">
-                    <Field label={t("exceptions.date")} className="w-40">
-                      <Input
-                        type="date"
-                        value={exception.date}
-                        onChange={(e) => updateException(index, { date: e.target.value })}
-                      />
-                    </Field>
+      {enabled ? (
+        <>
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">{t("weeklyLabel")}</legend>
+            <p className="text-sm text-muted-foreground">{t("weeklyHint")}</p>
+            <div className="space-y-2">
+              {DAYS.map((day) => {
+                const row = weekly[day];
+                const error = dayError(dayErrors, day);
+                return (
+                  <div
+                    key={day}
+                    className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3"
+                  >
                     <label
-                      htmlFor={`schedule-exception-closed-${index}`}
-                      className="flex items-center gap-2 text-sm"
+                      htmlFor={`schedule-day-${day}`}
+                      className="flex w-36 shrink-0 items-center gap-2 text-sm font-medium"
                     >
                       <Checkbox
-                        id={`schedule-exception-closed-${index}`}
-                        checked={exception.closed}
-                        onCheckedChange={(checked) =>
-                          updateException(index, {
-                            closed: checked === true,
-                            hours:
-                              checked === true
-                                ? null
-                                : (exception.hours ?? { start: "09:00", end: "18:00" }),
-                          })
-                        }
+                        id={`schedule-day-${day}`}
+                        checked={row.open}
+                        onCheckedChange={(checked) => toggleDayOpen(day, checked === true)}
                       />
-                      {t("exceptions.closed")}
+                      {t(`days.${day}`)}
                     </label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeException(index)}
-                    >
-                      {t("exceptions.remove")}
-                    </Button>
+                    {row.open ? (
+                      <div className="flex flex-1 flex-wrap items-center gap-2">
+                        <Field label={t("start")} className="w-32">
+                          <Input
+                            type="time"
+                            value={row.start ?? ""}
+                            onChange={(e) => updateDay(day, { start: e.target.value })}
+                          />
+                        </Field>
+                        <Field label={t("end")} className="w-32">
+                          <Input
+                            type="time"
+                            value={row.end ?? ""}
+                            onChange={(e) => updateDay(day, { end: e.target.value })}
+                          />
+                        </Field>
+                      </div>
+                    ) : null}
+                    {error ? (
+                      <p className="w-full text-sm font-medium text-destructive">{error}</p>
+                    ) : null}
                   </div>
-                  {!exception.closed ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Field label={t("start")} className="w-32">
-                        <Input
-                          type="time"
-                          value={exception.hours?.start ?? ""}
-                          onChange={(e) =>
-                            updateException(index, {
-                              hours: { start: e.target.value, end: exception.hours?.end ?? "" },
-                            })
-                          }
-                        />
-                      </Field>
-                      <Field label={t("end")} className="w-32">
-                        <Input
-                          type="time"
-                          value={exception.hours?.end ?? ""}
-                          onChange={(e) =>
-                            updateException(index, {
-                              hours: { start: exception.hours?.start ?? "", end: e.target.value },
-                            })
-                          }
-                        />
-                      </Field>
-                    </div>
-                  ) : null}
-                  {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          </fieldset>
 
-        <Button type="button" variant="outline" size="sm" onClick={addException}>
-          {t("exceptions.newDate")}
-        </Button>
-      </fieldset>
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">{t("exceptions.title")}</legend>
+            <p className="text-sm text-muted-foreground">{t("exceptions.hint")}</p>
+
+            {exceptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t("exceptions.empty")}</p>
+            ) : (
+              <div className="space-y-2">
+                {exceptions.map((exception, index) => {
+                  const error = dayError(exceptionErrors, String(index));
+                  return (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: rows are fully controlled by index, no per-row local state
+                    <div key={index} className="space-y-2 rounded-lg border border-border p-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <Field label={t("exceptions.date")} className="w-40">
+                          <Input
+                            type="date"
+                            value={exception.date}
+                            onChange={(e) => updateException(index, { date: e.target.value })}
+                          />
+                        </Field>
+                        <label
+                          htmlFor={`schedule-exception-closed-${index}`}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            id={`schedule-exception-closed-${index}`}
+                            checked={exception.closed}
+                            onCheckedChange={(checked) =>
+                              updateException(index, {
+                                closed: checked === true,
+                                hours:
+                                  checked === true
+                                    ? null
+                                    : (exception.hours ?? { start: "09:00", end: "18:00" }),
+                              })
+                            }
+                          />
+                          {t("exceptions.closed")}
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeException(index)}
+                        >
+                          {t("exceptions.remove")}
+                        </Button>
+                      </div>
+                      {!exception.closed ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Field label={t("start")} className="w-32">
+                            <Input
+                              type="time"
+                              value={exception.hours?.start ?? ""}
+                              onChange={(e) =>
+                                updateException(index, {
+                                  hours: { start: e.target.value, end: exception.hours?.end ?? "" },
+                                })
+                              }
+                            />
+                          </Field>
+                          <Field label={t("end")} className="w-32">
+                            <Input
+                              type="time"
+                              value={exception.hours?.end ?? ""}
+                              onChange={(e) =>
+                                updateException(index, {
+                                  hours: {
+                                    start: exception.hours?.start ?? "",
+                                    end: e.target.value,
+                                  },
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
+                      ) : null}
+                      {error ? (
+                        <p className="text-sm font-medium text-destructive">{error}</p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button type="button" variant="outline" size="sm" onClick={addException}>
+              {t("exceptions.newDate")}
+            </Button>
+          </fieldset>
+        </>
+      ) : null}
 
       {formError ? (
         <p className="text-sm text-destructive" role="alert">
