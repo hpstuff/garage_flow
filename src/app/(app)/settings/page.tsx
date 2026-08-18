@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
 import { getScheduleConfigAction } from "./_actions/schedule-actions";
 import { getVatConfigAction } from "./_actions/vat-actions";
+import { ScheduleEnabledToggle } from "./_components/schedule-enabled-toggle";
 import { ScheduleSettingsForm } from "./_components/schedule-settings-form";
 import { VatSettingsForm } from "./_components/vat-settings-form";
 
@@ -31,6 +32,7 @@ export default async function SettingsPage() {
     : { mode: "registered", rate: DEFAULT_VAT_RATE, vatNumber: null };
   // A failed schedule read falls back to the form's own defaults (Mon-Fri 09:00-18:00).
   const scheduleConfig = scheduleResult.ok ? scheduleResult.data : null;
+  const scheduleEnabled = scheduleConfig?.enabled ?? true;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -49,15 +51,19 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("schedule.title")}</CardTitle>
-          <CardDescription>{t("schedule.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ScheduleSettingsForm config={scheduleConfig} />
-        </CardContent>
-      </Card>
+      <ScheduleEnabledToggle enabled={scheduleEnabled} />
+
+      {scheduleEnabled ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("schedule.title")}</CardTitle>
+            <CardDescription>{t("schedule.subtitle")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScheduleSettingsForm config={scheduleConfig} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="border-accent-orange/40 bg-accent-orange/5">
         <CardHeader>
