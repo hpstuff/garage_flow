@@ -14,7 +14,7 @@
  */
 
 import { z } from "zod";
-import type { ScheduleConfig } from "../../../lib/schedule";
+import { configFromInput, parseStoredConfig, type ScheduleConfig } from "../../../lib/schedule";
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
 import { type Scope, type ScopedVatSettings, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
@@ -69,7 +69,7 @@ export async function setVatConfig(scope: Scope, input: unknown): Promise<VatCon
 /** The current Location's working schedule (GF-20). Returns the {@link ScheduleConfig} value object. */
 export async function getScheduleConfig(scope: Scope): Promise<ScheduleConfig> {
   const raw = await scoped(scope).getScheduleSettings();
-  return raw.config;
+  return toScheduleConfig(raw.config);
 }
 
 /**
@@ -81,6 +81,16 @@ export async function setScheduleConfig(scope: Scope, input: unknown): Promise<S
     throw new ValidationError("Invalid schedule config", z.flattenError(parsed.error).fieldErrors);
   }
 
-  const saved = await scoped(scope).setScheduleSettings(parsed.data);
-  return saved.config;
+  const config = configFromInput(parsed.data);
+  await scoped(scope).setScheduleSettings(config);
+  return config;
+}
+
+/**
+ * Shape the raw stored weekly schedule into the canonical {@link ScheduleConfig} (GF-20):
+ * missing days fall back to the default hours so readers and slot validation always
+ * see a complete weekly map.
+ */
+function toScheduleConfig(raw: unknown): ScheduleConfig {
+  return parseStoredConfig(raw);
 }

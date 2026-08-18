@@ -9,7 +9,7 @@
  */
 
 import { and, asc, desc, eq, gte, ilike, isNull, lt, or, sql } from "drizzle-orm";
-import type { ScheduleConfig } from "@/lib/schedule";
+import type { DateException, TimeRange, Weekday } from "@/lib/schedule";
 import { ConflictError, NotFoundError } from "../domain/errors";
 import type { Db } from "./client";
 import {
@@ -68,17 +68,21 @@ export interface VatSettingsWriteValues {
 }
 
 /**
- * The current Location's working schedule (GF-20) — the raw JSON column as-is.
- * Parsed by the service into a {@link ScheduleConfig} value object.
+ * The current Location's working schedule (GF-20) — the raw `working_schedule`
+ * JSON value, before the service parses it into a {@link ScheduleConfig}.
  */
 export interface ScopedScheduleSettings {
-  config: ScheduleConfig;
+  /** The raw stored JSON; shape is not guaranteed (legacy rows), so the service parses it. */
+  config: unknown;
 }
 
-/** The schedule values a caller may write — scope-derived columns are never here. */
+/**
+ * The canonical {@link ScheduleConfig} persisted on the Location (GF-20).
+ * Scope-derived columns are never here.
+ */
 export interface ScheduleWriteValues {
-  weekly: Record<number, { start: string; end: string } | null>;
-  exceptions: Array<{ date: string; closed: boolean; hours?: { start: string; end: string } }>;
+  weekly: Record<Weekday, TimeRange | null>;
+  exceptions: DateException[];
 }
 
 /** A Customer as it crosses the service boundary — an explicit, safe projection. */
@@ -857,7 +861,7 @@ export class ScopedDb {
     if (!row) {
       throw new NotFoundError("Location not found for the current scope");
     }
-    return { config: (row.config ? JSON.parse(row.config) : {}) as ScheduleConfig };
+    return { config: row.config ? JSON.parse(row.config) : {} };
   }
 
   /**
@@ -878,7 +882,7 @@ export class ScopedDb {
     if (!row) {
       throw new NotFoundError("Location not found for the current scope");
     }
-    return { config: values as ScheduleConfig };
+    return { config: values as unknown };
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
