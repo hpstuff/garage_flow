@@ -133,3 +133,11 @@ export const setScheduleConfigSchema = z
   })
   .strict();
 export type SetScheduleConfigInput = z.infer<typeof setScheduleConfigSchema>;
+
+/**
+ * Turn schedule enforcement on/off (GF-20), independent of the weekly hours or
+ * exceptions — a garage that doesn't want the feature at all can hide it without
+ * losing whatever hours it had configured.
+ */
+export const setScheduleEnabledSchema = z.object({ enabled: z.boolean() }).strict();
+export type SetScheduleEnabledInput = z.infer<typeof setScheduleEnabledSchema>;

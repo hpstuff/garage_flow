@@ -891,6 +891,26 @@ export class ScopedDb {
     return { enabled, config: config as unknown };
   }
 
+  /**
+   * Turn schedule enforcement on/off without touching the stored weekly hours or
+   * exceptions (GF-20) — some garages don't want the feature at all, and toggling
+   * it shouldn't discard hours they'd already configured. Scoped by `accountId` +
+   * `locationId`, so one Account can never touch another's schedule configuration.
+   */
+  async setScheduleEnabled(enabled: boolean): Promise<boolean> {
+    const rows = await this.#db
+      .update(location)
+      .set({ scheduleEnabled: enabled, updatedAt: new Date() })
+      .where(this.#locationScope())
+      .returning({ enabled: location.scheduleEnabled });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
+  }
+
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
   #customerScope() {
     return and(

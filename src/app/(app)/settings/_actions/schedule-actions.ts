@@ -5,7 +5,11 @@ import type { ActionResult } from "@/app/lib/action-result";
 import { requireScope } from "@/app/lib/session";
 import type { ScheduleConfig } from "@/lib/schedule";
 import { type FieldErrors, isDomainError, ValidationError } from "@/server/domain/errors";
-import { getScheduleConfig, setScheduleConfig } from "@/server/services/location/service";
+import {
+  getScheduleConfig,
+  setScheduleConfig,
+  setScheduleEnabled,
+} from "@/server/services/location/service";
 
 /**
  * Location Working Calendar Server Actions (GF-20). Each follows the reference shape
@@ -43,6 +47,22 @@ export async function setScheduleConfigAction(
     if (error instanceof ValidationError) {
       return { ok: false, error: error.code, fieldErrors: error.fieldErrors };
     }
+    if (isDomainError(error)) {
+      return { ok: false, error: error.code };
+    }
+    throw error;
+  }
+}
+
+/** Turn schedule enforcement on/off (GF-20), leaving the weekly hours/exceptions untouched. */
+export async function setScheduleEnabledAction(enabled: boolean): Promise<ActionResult<boolean>> {
+  try {
+    const scope = await requireScope();
+    const data = await setScheduleEnabled(scope, { enabled });
+    revalidatePath("/settings");
+    revalidatePath("/appointments");
+    return { ok: true, data };
+  } catch (error) {
     if (isDomainError(error)) {
       return { ok: false, error: error.code };
     }

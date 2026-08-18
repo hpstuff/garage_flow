@@ -18,7 +18,7 @@ import { configFromInput, parseStoredConfig, type ScheduleConfig } from "../../.
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
 import { type Scope, type ScopedVatSettings, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
-import { setScheduleConfigSchema, setVatConfigSchema } from "./schema";
+import { setScheduleConfigSchema, setScheduleEnabledSchema, setVatConfigSchema } from "./schema";
 
 // The VAT constants/types are transport-free (src/lib/vat) so client components
 // can import them too; re-exported here for server-side ergonomics (GF-12).
@@ -84,6 +84,23 @@ export async function setScheduleConfig(scope: Scope, input: unknown): Promise<S
   const config = configFromInput(parsed.data);
   await scoped(scope).setScheduleSettings(config);
   return config;
+}
+
+/**
+ * Turn schedule enforcement on/off (GF-20) without touching the weekly hours or
+ * exceptions already on file — some garages don't want the feature at all, and
+ * hiding it shouldn't discard hours they'd already configured.
+ */
+export async function setScheduleEnabled(scope: Scope, input: unknown): Promise<boolean> {
+  const parsed = setScheduleEnabledSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      "Invalid schedule enabled flag",
+      z.flattenError(parsed.error).fieldErrors,
+    );
+  }
+
+  return scoped(scope).setScheduleEnabled(parsed.data.enabled);
 }
 
 /**
