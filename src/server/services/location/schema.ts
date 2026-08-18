@@ -50,9 +50,11 @@ export type SetVatConfigInput = z.infer<typeof setVatConfigSchema>;
 /**
  * Schedule config input schemas (GF-20). Validation is authoritative in the
  * service, so every transport is protected — not just the web form.
+ *
+ * The accepted shape mirrors {@link ScheduleConfigInput} (`src/lib/schedule.ts`) —
+ * the flat, form-editable projection the settings form builds and
+ * {@link configFromInput} turns into the persisted {@link ScheduleConfig}.
  */
-
-const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
 /** Minutes since midnight for a local "HH:mm" time string (already regex-validated). */
 function timeToMinutes(time: string): number {
@@ -60,44 +62,72 @@ function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
-/** A single day's hours: two local-time strings in "HH:mm" format. */
+const timeRegex = /^\d{2}:\d{2}$/;
+
+/** A single day's hours: two local-time strings in "HH:mm" format, end after start. */
 const timeRangeSchema = z
   .object({
-    start: z
-      .string()
-      .regex(/^\d{2}:\d{2}$/, "Форматът трябва да е ЧЧ:ММ.")
-      .transform((v) => v as `${string}:${string}`),
-    end: z
-      .string()
-      .regex(/^\d{2}:\d{2}$/, "Форматът трябва да е ЧЧ:ММ.")
-      .transform((v) => v as `${string}:${string}`),
+    start: z.string().regex(timeRegex, "Форматът трябва да е ЧЧ:ММ."),
+    end: z.string().regex(timeRegex, "Форматът трябва да е ЧЧ:ММ."),
   })
-  .refine(
-    (value) => timeToMinutes(value.end) > timeToMinutes(value.start), // end must be after start
-    {
-      message: "Краят трябва да е след началото.",
-    },
-  );
-
-/** A single date exception. */
-const dateExceptionSchema = z
-  .object({
-    date: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Форматът на датата трябва да е ГГГГ-ММ-ДД.")
-      .transform((v) => v as `${string}-${string}-${string}`),
-    closed: z.boolean(),
-    hours: timeRangeSchema.optional(),
-  })
-  .refine((value) => !value.closed || value.hours === undefined, {
-    message: "Затворените дни не трябва да имат часове.",
+  .refine((value) => timeToMinutes(value.end) > timeToMinutes(value.start), {
+    message: "Краят трябва да е след началото.",
   });
 
-/** The full schedule config input. */
+/**
+ * One weekday row (GF-20): `open` plus nullable `HH:mm` hours. An open day must
+ * carry a valid range; a closed day must not carry hours at all.
+ */
+const scheduleDayInputSchema = z
+  .object({
+    open: z.boolean(),
+    start: z.string().regex(timeRegex, "Форматът трябва да е ЧЧ:ММ.").nullable(),
+    end: z.string().regex(timeRegex, "Форматът трябва да е ЧЧ:ММ.").nullable(),
+  })
+  .refine((value) => !value.open || (value.start !== null && value.end !== null), {
+    message: "Отвореният ден трябва да има начален и краен час.",
+  })
+  .refine((value) => value.open || (value.start === null && value.end === null), {
+    message: "Затвореният ден не трябва да има часове.",
+  })
+  .refine(
+    (value) =>
+      !value.open ||
+      value.start === null ||
+      value.end === null ||
+      timeToMinutes(value.end) > timeToMinutes(value.start),
+    { message: "Краят трябва да е след началото." },
+  );
+
+/** A single date exception: `closed` flag plus nullable override hours. */
+const exceptionInputSchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Форматът на датата трябва да е ГГГГ-ММ-ДД."),
+    closed: z.boolean(),
+    hours: timeRangeSchema.nullable(),
+  })
+  .refine((value) => !value.closed || value.hours === null, {
+    message: "Затворените дни не трябва да имат часове.",
+  })
+  .refine((value) => value.closed || value.hours !== null, {
+    message: "Отворените изключения трябва да имат часове.",
+  });
+
+/** The full schedule config input — every weekday explicit, exceptions a plain list. */
 export const setScheduleConfigSchema = z
   .object({
-    weekly: z.record(z.enum(DAY_KEYS), timeRangeSchema.nullable()),
-    exceptions: z.array(dateExceptionSchema).optional().default([]),
+    weekly: z
+      .object({
+        mon: scheduleDayInputSchema,
+        tue: scheduleDayInputSchema,
+        wed: scheduleDayInputSchema,
+        thu: scheduleDayInputSchema,
+        fri: scheduleDayInputSchema,
+        sat: scheduleDayInputSchema,
+        sun: scheduleDayInputSchema,
+      })
+      .strict(),
+    exceptions: z.array(exceptionInputSchema).default([]),
   })
   .strict();
 export type SetScheduleConfigInput = z.infer<typeof setScheduleConfigSchema>;
