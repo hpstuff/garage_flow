@@ -78,6 +78,7 @@ describe("setScheduleConfig — validation (no DB)", () => {
   it("rejects an open day missing hours", async () => {
     await expect(
       setScheduleConfig(s, {
+        enabled: true,
         weekly: { ...DEFAULT_WEEKLY_INPUT, mon: { open: true, start: null, end: null } },
         exceptions: [],
       }),
@@ -87,6 +88,7 @@ describe("setScheduleConfig — validation (no DB)", () => {
   it("rejects an open day whose end is not after its start", async () => {
     await expect(
       setScheduleConfig(s, {
+        enabled: true,
         weekly: { ...DEFAULT_WEEKLY_INPUT, mon: { open: true, start: "18:00", end: "09:00" } },
         exceptions: [],
       }),
@@ -96,6 +98,7 @@ describe("setScheduleConfig — validation (no DB)", () => {
   it("rejects a closed exception that also carries hours", async () => {
     await expect(
       setScheduleConfig(s, {
+        enabled: true,
         weekly: DEFAULT_WEEKLY_INPUT,
         exceptions: [{ date: "2026-12-25", closed: true, hours: { start: "09:00", end: "13:00" } }],
       }),
@@ -105,7 +108,13 @@ describe("setScheduleConfig — validation (no DB)", () => {
   it("rejects a missing weekday", async () => {
     const { sun: _sun, ...incomplete } = DEFAULT_WEEKLY_INPUT;
     await expect(
-      setScheduleConfig(s, { weekly: incomplete, exceptions: [] }),
+      setScheduleConfig(s, { enabled: true, weekly: incomplete, exceptions: [] }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a missing enabled flag", async () => {
+    await expect(
+      setScheduleConfig(s, { weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });
@@ -183,8 +192,9 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     );
   });
 
-  it("defaults a new Location to Mon-Fri 09:00-18:00, Sat-Sun closed (GF-20)", async () => {
+  it("defaults a new Location to enabled, Mon-Fri 09:00-18:00, Sat-Sun closed (GF-20)", async () => {
     const config = await getScheduleConfig(scope(accountA, locationA));
+    expect(config.enabled).toBe(true);
     expect(config.weekly[1]).toEqual({ start: "09:00", end: "18:00" });
     expect(config.weekly[6]).toBeNull();
     expect(config.weekly[7]).toBeNull();
@@ -193,6 +203,7 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
 
   it("stores a custom weekly schedule and a date exception, and reads it back (GF-20)", async () => {
     const saved = await setScheduleConfig(scope(accountA, locationA), {
+      enabled: true,
       weekly: {
         ...DEFAULT_WEEKLY_INPUT,
         sat: { open: true, start: "10:00", end: "14:00" },
@@ -205,11 +216,29 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(saved);
   });
 
+  it("disabling and re-enabling schedule enforcement round-trips (GF-20)", async () => {
+    const disabled = await setScheduleConfig(scope(accountA, locationA), {
+      enabled: false,
+      weekly: DEFAULT_WEEKLY_INPUT,
+      exceptions: [],
+    });
+    expect(disabled.enabled).toBe(false);
+    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(disabled);
+
+    const reenabled = await setScheduleConfig(scope(accountA, locationA), {
+      enabled: true,
+      weekly: DEFAULT_WEEKLY_INPUT,
+      exceptions: [],
+    });
+    expect(reenabled.enabled).toBe(true);
+    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(reenabled);
+  });
+
   it("cannot read or write another Account's Location schedule (GF-20)", async () => {
     const forged = scope(accountA, locationB);
     await expect(getScheduleConfig(forged)).rejects.toBeInstanceOf(NotFoundError);
     await expect(
-      setScheduleConfig(forged, { weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
+      setScheduleConfig(forged, { enabled: true, weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
