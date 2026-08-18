@@ -21,6 +21,7 @@ import {
   getScheduleConfig,
   getVatConfig,
   setScheduleConfig,
+  setScheduleEnabled,
   setVatConfig,
   toVatConfig,
 } from "./service";
@@ -115,6 +116,24 @@ describe("setScheduleConfig — validation (no DB)", () => {
   it("rejects a missing enabled flag", async () => {
     await expect(
       setScheduleConfig(s, { weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+});
+
+describe("setScheduleEnabled — validation (no DB)", () => {
+  const s = scope("acc", "loc");
+
+  it("rejects a non-boolean enabled value", async () => {
+    await expect(setScheduleEnabled(s, { enabled: "yes" })).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a missing enabled flag", async () => {
+    await expect(setScheduleEnabled(s, {})).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects unexpected keys", async () => {
+    await expect(
+      setScheduleEnabled(s, { enabled: true, weekly: DEFAULT_WEEKLY_INPUT }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });
@@ -216,22 +235,19 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(saved);
   });
 
-  it("disabling and re-enabling schedule enforcement round-trips (GF-20)", async () => {
-    const disabled = await setScheduleConfig(scope(accountA, locationA), {
-      enabled: false,
-      weekly: DEFAULT_WEEKLY_INPUT,
-      exceptions: [],
-    });
-    expect(disabled.enabled).toBe(false);
-    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(disabled);
+  it("setScheduleEnabled toggles on/off without touching the stored hours (GF-20)", async () => {
+    // A custom weekly schedule + exception was written above; toggling the flag
+    // must leave both exactly as they were.
+    const before = await getScheduleConfig(scope(accountA, locationA));
 
-    const reenabled = await setScheduleConfig(scope(accountA, locationA), {
-      enabled: true,
-      weekly: DEFAULT_WEEKLY_INPUT,
-      exceptions: [],
-    });
-    expect(reenabled.enabled).toBe(true);
-    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(reenabled);
+    const disabled = await setScheduleEnabled(scope(accountA, locationA), { enabled: false });
+    expect(disabled).toBe(false);
+    const afterDisable = await getScheduleConfig(scope(accountA, locationA));
+    expect(afterDisable).toEqual({ ...before, enabled: false });
+
+    const reenabled = await setScheduleEnabled(scope(accountA, locationA), { enabled: true });
+    expect(reenabled).toBe(true);
+    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(before);
   });
 
   it("cannot read or write another Account's Location schedule (GF-20)", async () => {
@@ -240,5 +256,8 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     await expect(
       setScheduleConfig(forged, { enabled: true, weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
     ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(setScheduleEnabled(forged, { enabled: false })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 });
