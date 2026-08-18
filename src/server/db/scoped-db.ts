@@ -69,9 +69,12 @@ export interface VatSettingsWriteValues {
 
 /**
  * The current Location's working schedule (GF-20) — the raw `working_schedule`
- * JSON value, before the service parses it into a {@link ScheduleConfig}.
+ * JSON value plus the `schedule_enabled` flag, before the service parses them
+ * into a {@link ScheduleConfig}.
  */
 export interface ScopedScheduleSettings {
+  /** Whether schedule enforcement applies at all — its own column, not part of the JSON. */
+  enabled: boolean;
   /** The raw stored JSON; shape is not guaranteed (legacy rows), so the service parses it. */
   config: unknown;
 }
@@ -81,6 +84,7 @@ export interface ScopedScheduleSettings {
  * Scope-derived columns are never here.
  */
 export interface ScheduleWriteValues {
+  enabled: boolean;
   weekly: Record<Weekday, TimeRange | null>;
   exceptions: DateException[];
 }
@@ -852,7 +856,7 @@ export class ScopedDb {
    */
   async getScheduleSettings(): Promise<ScopedScheduleSettings> {
     const rows = await this.#db
-      .select({ config: location.workingSchedule })
+      .select({ config: location.workingSchedule, enabled: location.scheduleEnabled })
       .from(location)
       .where(this.#locationScope())
       .limit(1);
@@ -861,7 +865,7 @@ export class ScopedDb {
     if (!row) {
       throw new NotFoundError("Location not found for the current scope");
     }
-    return { config: row.config ? JSON.parse(row.config) : {} };
+    return { enabled: row.enabled, config: row.config ? JSON.parse(row.config) : {} };
   }
 
   /**
@@ -869,20 +873,22 @@ export class ScopedDb {
    * `locationId`, so one Account can never write another's schedule configuration.
    */
   async setScheduleSettings(values: ScheduleWriteValues): Promise<ScopedScheduleSettings> {
+    const { enabled, ...config } = values;
     const rows = await this.#db
       .update(location)
       .set({
-        workingSchedule: JSON.stringify(values),
+        workingSchedule: JSON.stringify(config),
+        scheduleEnabled: enabled,
         updatedAt: new Date(),
       })
       .where(this.#locationScope())
-      .returning({ config: location.workingSchedule });
+      .returning({ config: location.workingSchedule, enabled: location.scheduleEnabled });
 
     const row = rows[0];
     if (!row) {
       throw new NotFoundError("Location not found for the current scope");
     }
-    return { config: values as unknown };
+    return { enabled, config: config as unknown };
   }
 
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */

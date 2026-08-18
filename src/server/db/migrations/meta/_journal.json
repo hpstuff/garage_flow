@@ -134,6 +134,13 @@
       "when": 1786041600000,
       "tag": "0018_add_working_schedule_to_location",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786128000000,
+      "tag": "0019_add_schedule_enabled_to_location",
+      "breakpoints": true
     }
   ]
 }
