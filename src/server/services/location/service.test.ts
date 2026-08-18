@@ -12,11 +12,18 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
+import { DEFAULT_WEEKLY_INPUT } from "../../../lib/schedule";
 import { db } from "../../db/client";
 import { location, organization } from "../../db/schema";
 import { scopeFromSession } from "../../db/scope";
 import { NotFoundError, ValidationError } from "../../domain/errors";
-import { getVatConfig, setVatConfig, toVatConfig } from "./service";
+import {
+  getScheduleConfig,
+  getVatConfig,
+  setScheduleConfig,
+  setVatConfig,
+  toVatConfig,
+} from "./service";
 
 const scope = (accountId: string, locationId: string) =>
   scopeFromSession({ accountId, locationId, role: "owner" });
@@ -61,6 +68,44 @@ describe("setVatConfig — validation (no DB)", () => {
   it("rejects unexpected keys", async () => {
     await expect(
       setVatConfig(s, { mode: "registered", rate: 20, accountId: "x" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+});
+
+describe("setScheduleConfig — validation (no DB)", () => {
+  const s = scope("acc", "loc");
+
+  it("rejects an open day missing hours", async () => {
+    await expect(
+      setScheduleConfig(s, {
+        weekly: { ...DEFAULT_WEEKLY_INPUT, mon: { open: true, start: null, end: null } },
+        exceptions: [],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects an open day whose end is not after its start", async () => {
+    await expect(
+      setScheduleConfig(s, {
+        weekly: { ...DEFAULT_WEEKLY_INPUT, mon: { open: true, start: "18:00", end: "09:00" } },
+        exceptions: [],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a closed exception that also carries hours", async () => {
+    await expect(
+      setScheduleConfig(s, {
+        weekly: DEFAULT_WEEKLY_INPUT,
+        exceptions: [{ date: "2026-12-25", closed: true, hours: { start: "09:00", end: "13:00" } }],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a missing weekday", async () => {
+    const { sun: _sun, ...incomplete } = DEFAULT_WEEKLY_INPUT;
+    await expect(
+      setScheduleConfig(s, { weekly: incomplete, exceptions: [] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });
@@ -136,5 +181,35 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
     await expect(setVatConfig(forged, { mode: "registered", rate: 20 })).rejects.toBeInstanceOf(
       NotFoundError,
     );
+  });
+
+  it("defaults a new Location to Mon-Fri 09:00-18:00, Sat-Sun closed (GF-20)", async () => {
+    const config = await getScheduleConfig(scope(accountA, locationA));
+    expect(config.weekly[1]).toEqual({ start: "09:00", end: "18:00" });
+    expect(config.weekly[6]).toBeNull();
+    expect(config.weekly[7]).toBeNull();
+    expect(config.exceptions).toEqual([]);
+  });
+
+  it("stores a custom weekly schedule and a date exception, and reads it back (GF-20)", async () => {
+    const saved = await setScheduleConfig(scope(accountA, locationA), {
+      weekly: {
+        ...DEFAULT_WEEKLY_INPUT,
+        sat: { open: true, start: "10:00", end: "14:00" },
+      },
+      exceptions: [{ date: "2026-12-25", closed: true, hours: null }],
+    });
+    expect(saved.weekly[6]).toEqual({ start: "10:00", end: "14:00" });
+    expect(saved.exceptions).toEqual([{ date: "2026-12-25", closed: true }]);
+
+    expect(await getScheduleConfig(scope(accountA, locationA))).toEqual(saved);
+  });
+
+  it("cannot read or write another Account's Location schedule (GF-20)", async () => {
+    const forged = scope(accountA, locationB);
+    await expect(getScheduleConfig(forged)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      setScheduleConfig(forged, { weekly: DEFAULT_WEEKLY_INPUT, exceptions: [] }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
