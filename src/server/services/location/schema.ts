@@ -141,3 +141,11 @@ export type SetScheduleConfigInput = z.infer<typeof setScheduleConfigSchema>;
  */
 export const setScheduleEnabledSchema = z.object({ enabled: z.boolean() }).strict();
 export type SetScheduleEnabledInput = z.infer<typeof setScheduleEnabledSchema>;
+
+/**
+ * Turn the Kanban board on/off (GF-22), independent of the per-stage
+ * `hiddenStages` — a Location that doesn't want the board at all can hide it
+ * without losing the stages it has already configured.
+ */
+export const setKanbanEnabledSchema = z.object({ enabled: z.boolean() }).strict();
+export type SetKanbanEnabledInput = z.infer<typeof setKanbanEnabledSchema>;

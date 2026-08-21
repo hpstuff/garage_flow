@@ -20,7 +20,9 @@ import { NotFoundError, ValidationError } from "../../domain/errors";
 import {
   getScheduleConfig,
   getVatConfig,
+  isKanbanEnabled,
   isScheduleEnabled,
+  setKanbanEnabled,
   setScheduleConfig,
   setScheduleEnabled,
   setVatConfig,
@@ -136,6 +138,24 @@ describe("setScheduleEnabled — validation (no DB)", () => {
     await expect(
       setScheduleEnabled(s, { enabled: true, weekly: DEFAULT_WEEKLY_INPUT }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+});
+
+describe("setKanbanEnabled — validation (no DB)", () => {
+  const s = scope("acc", "loc");
+
+  it("rejects a non-boolean enabled value", async () => {
+    await expect(setKanbanEnabled(s, { enabled: "yes" })).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects a missing enabled flag", async () => {
+    await expect(setKanbanEnabled(s, {})).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("rejects unexpected keys", async () => {
+    await expect(setKanbanEnabled(s, { enabled: true, stages: [] })).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 });
 
@@ -263,5 +283,23 @@ describe.skipIf(!hasDb)("location settings service — integration (real Postgre
       NotFoundError,
     );
     await expect(isScheduleEnabled(forged)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("setKanbanEnabled toggles on/off (GF-22)", async () => {
+    const disabled = await setKanbanEnabled(scope(accountA, locationA), { enabled: false });
+    expect(disabled).toBe(false);
+    expect(await isKanbanEnabled(scope(accountA, locationA))).toBe(false);
+
+    const reenabled = await setKanbanEnabled(scope(accountA, locationA), { enabled: true });
+    expect(reenabled).toBe(true);
+    expect(await isKanbanEnabled(scope(accountA, locationA))).toBe(true);
+  });
+
+  it("cannot read or write another Account's Location Kanban flag (GF-22)", async () => {
+    const forged = scope(accountA, locationB);
+    await expect(setKanbanEnabled(forged, { enabled: false })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    await expect(isKanbanEnabled(forged)).rejects.toBeInstanceOf(NotFoundError);
   });
 });

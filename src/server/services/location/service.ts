@@ -18,7 +18,12 @@ import { configFromInput, parseStoredConfig, type ScheduleConfig } from "../../.
 import { DEFAULT_VAT_RATE_PERCENT, type VatConfig } from "../../../lib/vat";
 import { type Scope, type ScopedVatSettings, scoped } from "../../db";
 import { ValidationError } from "../../domain/errors";
-import { setScheduleConfigSchema, setScheduleEnabledSchema, setVatConfigSchema } from "./schema";
+import {
+  setKanbanEnabledSchema,
+  setScheduleConfigSchema,
+  setScheduleEnabledSchema,
+  setVatConfigSchema,
+} from "./schema";
 
 // The VAT constants/types are transport-free (src/lib/vat) so client components
 // can import them too; re-exported here for server-side ergonomics (GF-12).
@@ -110,6 +115,32 @@ export async function setScheduleEnabled(scope: Scope, input: unknown): Promise<
   }
 
   return scoped(scope).setScheduleEnabled(parsed.data.enabled);
+}
+
+/**
+ * Whether the Kanban board is enabled at all (GF-22) — a cheap single-column
+ * read for call sites (app shell nav, Repair Orders list, dashboard) that only
+ * need the flag, not the per-stage `hiddenStages`.
+ */
+export async function isKanbanEnabled(scope: Scope): Promise<boolean> {
+  return scoped(scope).getKanbanEnabled();
+}
+
+/**
+ * Turn the Kanban board on/off (GF-22) without touching the per-stage
+ * `hiddenStages` already on file — a Location that doesn't want the board at
+ * all can hide it without discarding the stages it has already configured.
+ */
+export async function setKanbanEnabled(scope: Scope, input: unknown): Promise<boolean> {
+  const parsed = setKanbanEnabledSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      "Invalid Kanban enabled flag",
+      z.flattenError(parsed.error).fieldErrors,
+    );
+  }
+
+  return scoped(scope).setKanbanEnabled(parsed.data.enabled);
 }
 
 /**
