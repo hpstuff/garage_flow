@@ -104,6 +104,12 @@ export const location = pgTable("location", {
    * existing Location keeps the enforcement it already had.
    */
   scheduleEnabled: boolean("schedule_enabled").notNull().default(true),
+  /**
+   * Whether the Kanban board is enabled at all for this Location (GF-22).
+   * A dedicated all-or-nothing opt-out: `true` by default so every existing
+   * Location keeps the board it already has, mirroring `scheduleEnabled`.
+   */
+  kanbanEnabled: boolean("kanban_enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

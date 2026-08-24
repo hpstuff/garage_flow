@@ -931,6 +931,47 @@ export class ScopedDb {
     return row.enabled;
   }
 
+  /**
+   * Whether the current Location has its Kanban board enabled at all (GF-22) —
+   * an all-or-nothing opt-out, independent of the per-stage `hiddenStages`.
+   * A single-column read, cheaper than a full Location read for call sites that
+   * only need the flag. Scoped by `accountId` + `locationId`, so one Account can
+   * never read another's flag.
+   */
+  async getKanbanEnabled(): Promise<boolean> {
+    const rows = await this.#db
+      .select({ enabled: location.kanbanEnabled })
+      .from(location)
+      .where(this.#locationScope())
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
+  }
+
+  /**
+   * Turn the Kanban board on/off for the current Location (GF-22) without
+   * touching the per-stage `hiddenStages` — toggling it shouldn't discard the
+   * stages a Location has already configured. Scoped by `accountId` +
+   * `locationId`, so one Account can never touch another's board.
+   */
+  async setKanbanEnabled(enabled: boolean): Promise<boolean> {
+    const rows = await this.#db
+      .update(location)
+      .set({ kanbanEnabled: enabled, updatedAt: new Date() })
+      .where(this.#locationScope())
+      .returning({ enabled: location.kanbanEnabled });
+
+    const row = rows[0];
+    if (!row) {
+      throw new NotFoundError("Location not found for the current scope");
+    }
+    return row.enabled;
+  }
+
   /** The scope's `{ accountId, locationId }` as a reusable query predicate. */
   #customerScope() {
     return and(
