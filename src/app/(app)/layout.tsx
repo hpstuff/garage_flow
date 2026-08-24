@@ -9,7 +9,7 @@ import {
   SidebarHeader,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import { isScheduleEnabled } from "@/server/services/location/service";
+import { isKanbanEnabled, isScheduleEnabled } from "@/server/services/location/service";
 import { AppBreadcrumb } from "./_components/app-breadcrumb";
 import { AppSidebarNav } from "./_components/app-sidebar-nav";
 import { BreadcrumbProvider } from "./_components/breadcrumb-context";
@@ -32,7 +32,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // doesn't get the Appointments nav item — see the matching route guard in
   // appointments/layout.tsx for direct navigation.
   const scheduleEnabled = await isScheduleEnabled(scope);
-  const hiddenNavKeys = scheduleEnabled ? [] : ["appointments"];
+  const hiddenNavKeys = [];
+  if (!scheduleEnabled) {
+    hiddenNavKeys.push("appointments");
+  }
+  if (!(await isKanbanEnabled(scope))) {
+    hiddenNavKeys.push("board");
+  }
 
   return (
     <BreadcrumbProvider>
