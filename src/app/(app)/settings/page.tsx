@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEFAULT_VAT_RATE, type VatConfig } from "@/lib/vat";
+import { getKanbanEnabledAction } from "./_actions/kanban-actions";
 import { getScheduleConfigAction } from "./_actions/schedule-actions";
 import { getVatConfigAction } from "./_actions/vat-actions";
+import { KanbanEnabledToggle } from "./_components/kanban-enabled-toggle";
 import { ScheduleEnabledToggle } from "./_components/schedule-enabled-toggle";
 import { ScheduleSettingsForm } from "./_components/schedule-settings-form";
 import { VatSettingsForm } from "./_components/vat-settings-form";
@@ -18,9 +20,10 @@ import { VatSettingsForm } from "./_components/vat-settings-form";
 export default async function SettingsPage() {
   const t = await getTranslations("settings");
 
-  const [vatResult, scheduleResult] = await Promise.all([
+  const [vatResult, scheduleResult, kanbanResult] = await Promise.all([
     getVatConfigAction(),
     getScheduleConfigAction(),
+    getKanbanEnabledAction(),
   ]);
   if (!vatResult.ok && vatResult.error === "UNAUTHENTICATED") {
     redirect("/login");
@@ -33,6 +36,9 @@ export default async function SettingsPage() {
   // A failed schedule read falls back to the form's own defaults (Mon-Fri 09:00-18:00).
   const scheduleConfig = scheduleResult.ok ? scheduleResult.data : null;
   const scheduleEnabled = scheduleConfig?.enabled ?? true;
+  // The Kanban board toggle is reachable regardless of state (never hidden) —
+  // a failed read falls back to the default so the row always renders.
+  const kanbanEnabled = kanbanResult.ok ? kanbanResult.data : true;
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -64,6 +70,8 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <KanbanEnabledToggle enabled={kanbanEnabled} />
 
       <Card className="border-accent-orange/40 bg-accent-orange/5">
         <CardHeader>
