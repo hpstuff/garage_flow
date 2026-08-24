@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import type { ScopedRepairOrder } from "@/server/services/repair-order/service";
+import { getKanbanEnabledAction } from "./_actions/kanban-enabled-actions";
 import { listRepairOrdersAction } from "./_actions/repair-order-actions";
 import { stageBadgeVariant } from "./_components/stages";
 import { invoiceStatusVariant, paymentStatusVariant } from "./_components/status";
@@ -28,13 +29,19 @@ export default async function RepairOrdersPage() {
   const t = await getTranslations("repairOrders");
   const tStage = await getTranslations("repairOrders.stage");
 
-  const result = await listRepairOrdersAction();
+  const [result, kanbanResult] = await Promise.all([
+    listRepairOrdersAction(),
+    getKanbanEnabledAction(),
+  ]);
   if (!result.ok) {
     if (result.error === "UNAUTHENTICATED") {
       redirect("/login");
     }
     return <p className="text-destructive">{t("error")}</p>;
   }
+  // A failed Kanban flag read falls back to hiding the link (fail-safe, same
+  // spirit as the Settings page fallbacks) — don't render a broken link.
+  const kanbanEnabled = kanbanResult.ok ? kanbanResult.data : false;
 
   const orders = result.data;
 
@@ -46,9 +53,11 @@ export default async function RepairOrdersPage() {
           <p className="text-muted-foreground">{t("subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/repair-orders/board" className={buttonVariants({ variant: "outline" })}>
-            {t("board.open")}
-          </Link>
+          {kanbanEnabled && (
+            <Link href="/repair-orders/board" className={buttonVariants({ variant: "outline" })}>
+              {t("board.open")}
+            </Link>
+          )}
           <Link href="/repair-orders/new" className={buttonVariants()}>
             {t("new")}
           </Link>
