@@ -32,7 +32,7 @@ export default async function DashboardPage() {
     return <p className="text-destructive">{t("error")}</p>;
   }
 
-  const { location, metrics, ordersByStage } = result.data;
+  const { location, metrics, ordersByStage, isKanbanEnabled } = result.data;
   const cards = [
     { key: "activeRepairOrders", value: metrics.activeRepairOrders },
     { key: "customers", value: metrics.customers },
@@ -58,41 +58,44 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {totalOrders > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("stageChart")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tStageColumns("stage")}</TableHead>
-                  <TableHead className="text-right">{tStageColumns("count")}</TableHead>
-                  <TableHead className="text-right">{tStageColumns("share")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ordersByStage.map(({ stage, count }) => (
-                  <TableRow key={stage}>
-                    <TableCell className="font-medium">{tStage(stage)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatNumber(count)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {formatShare(count / totalOrders)}
-                    </TableCell>
+      {isKanbanEnabled &&
+        (totalOrders > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("stageChart")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{tStageColumns("stage")}</TableHead>
+                    <TableHead className="text-right">{tStageColumns("count")}</TableHead>
+                    <TableHead className="text-right">{tStageColumns("share")}</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {t("empty")}
-          </CardContent>
-        </Card>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {ordersByStage.map(({ stage, count }) => (
+                    <TableRow key={stage}>
+                      <TableCell className="font-medium">{tStage(stage)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatNumber(count)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {formatShare(count / totalOrders)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              {t("empty")}
+            </CardContent>
+          </Card>
+        ))}
     </div>
   );
 }
